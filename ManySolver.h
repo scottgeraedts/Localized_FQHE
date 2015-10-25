@@ -158,7 +158,7 @@ void ManySolver<ART>::make_Hnn(){
 	ART temp;
 	for(signed int a=0;a<NPhi;a++){
 
-		//terms from the disorder potential that act on the same site
+		//terms from the disorder potential
 		if(disorder){
 			for(int b=0;b<NPhi;b++){
 				temp=get_disorder(a,b);
@@ -172,13 +172,12 @@ void ManySolver<ART>::make_Hnn(){
 		}
 
 		for(signed int b=a+1;b<NPhi;b++){
-
+			if(b==a) continue;
+			
 			//this is for `two body' terms which are four-body interaction terms where the indices come in pairs
 			temp=get_interaction(a,b);
-//			cout<<a<<" "<<b<<" "<<temp<<endl;
 			for(int i=0;i<(signed)nStates;i++){
 				if(states[i].test(a) && states[i].test(b)){
-					//if(states[i].to_ulong()==273) cout<<"called two body with "<<a<<" "<<b<<" for "<<states[i]<<endl;
 					Hnn(i,i)+=temp;
 				}
 			}
@@ -205,7 +204,7 @@ void ManySolver<ART>::make_Hnn(){
 				for(int i=0;i<nStates;i++){
 					if(states[i].test(a) && states[i].test(b) && !states[i].test(c) && !states[i].test(d)){
 						j=lookup_flipped(states[i],a,b,c,d);
-//						Hnn(i,j)+=(double)(adjust_sign(a,b,states[i])*adjust_sign(c,d,states[i])) * temp;
+						Hnn(i,j)+=(double)(adjust_sign(a,b,states[i])*adjust_sign(c,d,states[i])) * temp;
 					}
 				}	
 			}	

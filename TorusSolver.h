@@ -29,22 +29,22 @@ template <class ART>
 TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V):ManySolver<ART>(tNe,tcharge,1){
 	//stuff unique to the torus
 
-	this->NPhi=2*this->Ne;
+	this->NPhi=3*this->Ne;
 	Ly=sqrt(M_PI*this->NPhi*this->Ne/2.);//aspect ratio is Lx/Ly=Ne/4
 	Lx=(4/(1.*this->Ne))*Ly;
 
-	add_disorder(0,0.1);
+	//add_disorder(0,0.1);
 	clock_t t;
 	t=clock();
 	this->init();
-	cout<<this->es.eigenvalues()<<endl;
+	cout<<this->es.eigenvalues().head(10).array()/this->Ne+self_energy()<<endl;
 	t=clock()-t;
 	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
 
 	this->cache=1;
 	t=clock();
 	this->init();
-	cout<<this->es.eigenvalues()<<endl;
+	cout<<this->es.eigenvalues().head(10).array()/this->Ne+self_energy()<<endl;
 	t=clock()-t;
 	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
 //	cout<<this->Hnn<<endl;
@@ -58,7 +58,7 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V):ManySolver<ART>(tNe
 	this->project=1;
 	t=clock();
 	this->init();
-	cout<<this->es.eigenvalues()<<endl;
+	cout<<this->es.eigenvalues().head(10).array()/this->Ne+self_energy()<<endl;
 	t=clock()-t;
 	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
 //	cout<<this->Hnn<<endl;
@@ -167,8 +167,6 @@ double TorusSolver<ART>::self_energy(){
 template <class ART>
 ART TorusSolver<ART>::four_body(int a,int b,int c,int d){
 	int print=0,start=0;
-	count++;
-	//if (( a==0 && b==1 && c==3 && d==4) || (a==3 && b==4 &&c==0 &&d==1 )) print=1;
 	ART out=0; double tol=1e-17;
 	double qx,qy,expqy,expqx,temp,qfactor;
 	
