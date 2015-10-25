@@ -37,14 +37,14 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V):ManySolver<ART>(tNe
 	clock_t t;
 	t=clock();
 	this->init();
-	cout<<this->es.eigenvalues().head(10).array()/this->Ne<<" "<<self_energy()<<endl;
+	cout<<this->es.eigenvalues().head(1).array()/this->Ne<<" "<<self_energy()<<endl;
 	t=clock()-t;
 	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
 
 	this->cache=1;
 	t=clock();
 	this->init();
-	cout<<this->es.eigenvalues().head(10).array()/this->Ne>>" ">>self_energy()<<endl;
+	cout<<this->es.eigenvalues().head(1).array()/this->Ne<<" "<<self_energy()<<endl;
 	t=clock()-t;
 	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
 //	cout<<this->Hnn<<endl;
@@ -58,7 +58,7 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V):ManySolver<ART>(tNe
 	this->project=1;
 	t=clock();
 	this->init();
-	cout<<this->es.eigenvalues().head(10).array()/this->Ne+self_energy()<<endl;
+	cout<<this->es.eigenvalues().head(1).array()/this->Ne+self_energy()<<endl;
 	t=clock()-t;
 	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
 //	cout<<this->Hnn<<endl;

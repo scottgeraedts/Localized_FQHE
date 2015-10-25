@@ -100,6 +100,7 @@ void ManySolver<ART>::init(){
 	
 	ZeroHnn();	
 	make_Hnn();
+	cout<<Hnn<<endl;
 //	if(disorder) disorderHnn();	
 
 //	clock_t t;
@@ -195,8 +196,9 @@ void ManySolver<ART>::make_Hnn(){
 				if ((a+b-c)<0) d=a+b-c+NPhi;
 				else d=(a+b-c)%NPhi;
 				if ( d==c) continue;
+				if(a==c || a==d || b==c|| b==d) continue;
 				temp=get_interaction(a,b,c,d);
-//				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
+				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
 				for(int i=0;i<nStates;i++){
 					if(states[i].test(a) && states[i].test(b) && ( (!states[i].test(c) && !states[i].test(d)) ) ) { //|| (a==d && c==b) || (a==c && b==d) ) )  {
 						j=lookup_flipped(states[i],a,b,c,d);
