@@ -171,17 +171,14 @@ void ManySolver<ART>::make_Hnn(){
 			}
 		}
 
-		for(signed int b=a+1;b<NPhi;b++){
+		for(signed int b=0;b<NPhi;b++){
 			if(b==a) continue;
-			
-			//this is for `two body' terms which are four-body interaction terms where the indices come in pairs
-			temp=get_interaction(a,b);
-			for(int i=0;i<(signed)nStates;i++){
-				if(states[i].test(a) && states[i].test(b)){
-					Hnn(i,i)+=temp;
-				}
+			if (b>a){
+				temp=get_interaction(a,b);
+				for(int i=0;i<nStates;i++)
+					if (states[i].test(a) && states[i].test(b)) Hnn(i,i)+=temp;
 			}
-			
+						
 			//a+b=c+d, this sets some restrictions on which c and d need to be summed over
 			//on a sphere, there are already restrictions on the possible c, though on the torus more c's are possible (its difficult to a priori determine which ones)
 			int c_upper,c_lower;
@@ -195,14 +192,13 @@ void ManySolver<ART>::make_Hnn(){
 				}
 			}
 			for(int c=c_lower;c<c_upper;c++){
-				if (c==a || c==b) continue;				
 				if ((a+b-c)<0) d=a+b-c+NPhi;
 				else d=(a+b-c)%NPhi;
-				if (d==a || d==b || d<=c) continue;
+				if ( d==c) continue;
 				temp=get_interaction(a,b,c,d);
 //				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
 				for(int i=0;i<nStates;i++){
-					if(states[i].test(a) && states[i].test(b) && !states[i].test(c) && !states[i].test(d)){
+					if(states[i].test(a) && states[i].test(b) && ( (!states[i].test(c) && !states[i].test(d)) ) ) { //|| (a==d && c==b) || (a==c && b==d) ) )  {
 						j=lookup_flipped(states[i],a,b,c,d);
 						Hnn(i,j)+=(double)(adjust_sign(a,b,states[i])*adjust_sign(c,d,states[i])) * temp;
 					}
@@ -224,12 +220,10 @@ void ManySolver<ART>::make_cache(){
 				two_body_cache[four_array_map(a,b,0,0)]=single.getH(a,b);
 			}
 		}
-		for(signed int b=a+1;b<NPhi;b++){
+		for(signed int b=0;b<NPhi;b++){
+			if (b==a) continue;
 
-			//this is for `two body' terms which are four-body interaction terms where the indices come in pairs
-			four_body_cache[four_array_map(a,b,a,b)]=two_body(a,b);
-			
-
+			if(b>a) four_body_cache[four_array_map(a,b,b,a)]=two_body(a,b);		
 			//a+b=c+d, this sets some restrictions on which c and d need to be summed over
 			//on a sphere, there are already restrictions on the possible c, though on the torus more c's are possible (its difficult to a priori determine which ones)
 			int c_upper,c_lower;
@@ -243,10 +237,10 @@ void ManySolver<ART>::make_cache(){
 				}
 			}
 			for(int c=c_lower;c<c_upper;c++){
-				if (c==a || c==b) continue;				
 				if ((a+b-c)<0) d=a+b-c+NPhi;
 				else d=(a+b-c)%NPhi;
-				if (d==a || d==b || d<=c) continue;
+				if (d==c) continue;
+				if (a==c || a==d || b==c ||b==d) continue;
 				four_body_cache[four_array_map(a,b,c,d)]=four_body(a,b,c,d);
 			}	
 		}
@@ -285,7 +279,7 @@ void ManySolver<ART>::ZeroHnn(){ Hnn=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::D
 template<class ART>
 ART ManySolver<ART>::get_interaction(int a,int b){
 	if(!cache) return two_body(a,b);
-	else if(!project) return four_body_cache[four_array_map(a,b,a,b)];
+	else if(!project) return four_body_cache[four_array_map(a,b,b,a)];
 	else return four_body_project(a,b,a,b);
 }
 template<class ART>
@@ -310,13 +304,10 @@ int ManySolver<ART>::four_array_map(int a,int b,int c, int d){ return a+b*NPhi+c
 template<class ART>
 ART ManySolver<ART>::four_body_project(int a,int b,int c,int d){
 	ART out=0;
-	int id,sa,sb,sc,sd;
+	int id;
 	for(int ia=0;ia<NPhi;ia++){
 		for(int ib=0;ib<NPhi;ib++){
 			if (ib==ia) continue;
-
-			if (ib<ia){ sa=ib;	sb=ia; //we only saved terms with a<b in the cache, so need to swap a and b if this isn't true
-			}else{ sa=ia; sb=ib; }
 
 			//pick bounds on c
 			int c_upper,c_lower;
@@ -333,11 +324,8 @@ ART ManySolver<ART>::four_body_project(int a,int b,int c,int d){
 				if ((ia+ib-ic)<0) id=ia+ib-ic+NPhi;
 				else id=(ia+ib-ic)%NPhi;				
 				if (id==ic) continue;
-
-				if (id<ic){ sc=id;	sd=ic;
-				}else{ sc=ic; sd=id; }
 					
-				out+=basis(a,ia)*basis(b,ib)*basis(c,ic)*basis(d,id)*four_body_cache[four_array_map(sa,sb,sc,sd)];
+				out+=basis(a,ia)*basis(b,ib)*basis(c,ic)*basis(d,id)*four_body_cache[four_array_map(ia,ib,ic,id)];
 			}
 		}
 	}

@@ -37,14 +37,14 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V):ManySolver<ART>(tNe
 	clock_t t;
 	t=clock();
 	this->init();
-	cout<<this->es.eigenvalues().head(10).array()/this->Ne+self_energy()<<endl;
+	cout<<this->es.eigenvalues().head(10).array()/this->Ne<<" "<<self_energy()<<endl;
 	t=clock()-t;
 	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
 
 	this->cache=1;
 	t=clock();
 	this->init();
-	cout<<this->es.eigenvalues().head(10).array()/this->Ne+self_energy()<<endl;
+	cout<<this->es.eigenvalues().head(10).array()/this->Ne>>" ">>self_energy()<<endl;
 	t=clock()-t;
 	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
 //	cout<<this->Hnn<<endl;
@@ -166,12 +166,14 @@ double TorusSolver<ART>::self_energy(){
 //compute four-body terms for torus case
 template <class ART>
 ART TorusSolver<ART>::four_body(int a,int b,int c,int d){
-	int print=0,start=0;
+	int start=0, sign=1;
 	ART out=0; double tol=1e-17;
 	double qx,qy,expqy,expqx,temp,qfactor;
+	if ( (a<b) == (c<d) ) sign=-1;
 	
 	for(int my=0;my>-1;my++){
 		if(my==0) qfactor=1.;
+		if(my==0 && a==d) continue; //can't have the qx=qy=0 term
 		else qfactor=2.;
 		
 		qy=2*M_PI/Ly*my;
@@ -186,40 +188,18 @@ ART TorusSolver<ART>::four_body(int a,int b,int c,int d){
 			if (expqx*expqy<tol) break;			
 			//p2=((c-b)-(a-d)-p1*this->NPhi)/this->NPhi; //don't need this since i'm not including theta_y terms
 			temp=qfactor*expqx*expqy* cos(qy*2*M_PI/Lx*(a-c))*this->V_Coulomb(qx,qy);//used V(qx,qy)=V(qx,-qy), this would need to be more complicated if that weren't true
-			out-=temp;
-			if(print) cout<<"p+ ad "<<p1<<" "<<2*M_PI/Lx*(a-d)<<" "<<p1*Ly<<" "<<temp<<endl;
+			out+=temp;
 		}
 		for(int p1=start-1;p1<1;p1--){
 			qx=2*M_PI/Lx*(a-d)+p1*Ly;
 			expqx=exp(-0.5*qx*qx);
 			if (expqx*expqy<tol) break;			
 			temp=qfactor*expqx*expqy* cos(qy*2*M_PI/Lx*(a-c))*this->V_Coulomb(qx,qy);
-			out-=temp;
-			if(print) cout<<"p- ad "<<p1<<" "<<temp<<endl;
+			out+=temp;
 		}			
 
-		//a=n1,b=n2,c=n4,d=n3 term
-		if(a<c) start=1;
-		else start=0;
-		for(int p1=start;p1>-1;p1++){
-			qx=2*M_PI/Lx*(a-c)+p1*Ly;
-			expqx=exp(-0.5*qx*qx);
-			if (expqx*expqy<tol) break;			
-			temp=qfactor * expqx*expqy* cos(qy*2*M_PI/Lx*(a-d))* this->V_Coulomb(qx,qy);
-			out+=temp;
-			if(print) cout<<"p+ ac "<<p1<<" "<<temp<<endl;
-		}
-		for(int p1=start-1;p1<1;p1--){
-			qx=2*M_PI/Lx*(a-c)+p1*Ly;
-			expqx=exp(-0.5*qx*qx);
-			if (expqx*expqy<tol) break;			
-			temp=qfactor * expqx*expqy* cos(qy*2*M_PI/Lx*(a-d)) * this->V_Coulomb(qx,qy);
-			out+=temp;
-			if(print) cout<<"p- ac "<<p1<<" "<<temp<<endl;
-		}			
-		
 	}
-	return out;
+	return 0.5*sign*out;
 }
 //loads single particle class that provides disorder potentials
 template<class ART>
