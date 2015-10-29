@@ -22,13 +22,15 @@ void Potential::make_potential_gaussian(map <string, double> &params){
 void Potential::make_potential_delta(map <string, double> &params){
 	double qx,qy;
 	complex<double> temp(0,0);
-	int ndeltas=floor(params["ndeltas"]+0.1);
+	int nLow=floor(params["nLow"]+0.1);
+	int nHigh=floor(params["nHigh"]+0.1);
 	double Vstrength=params["Vstrength"];
-	for(int i=0;i<ndeltas;i++){
+	cout<<"ns: "<<nLow<<" "<<nHigh<<endl;
+	for(int i=0;i<nLow;i++){
+		xloc.push_back(ran.rand(Lx)); yloc.push_back(ran.rand(Ly));sign.push_back(-1);//list of locations and signs of delta functions
+	}for(int i=0;i<nHigh;i++){
 		xloc.push_back(ran.rand(Lx)); yloc.push_back(ran.rand(Ly));sign.push_back(1);//list of locations and signs of delta functions
-		xloc.push_back(ran.rand(Lx)); yloc.push_back(ran.rand(Ly)); sign.push_back(-1);
 	}
-//			xloc.push_back(ran.rand(0)); yloc.push_back(ran.rand(0));sign.push_back(1);//list of locations and signs of delta functions
 	for(int i=0;i<2*qbounds+1;i++){
 		for(int j=0;j<=qbounds;j++){
 			qx=2.*M_PI*(i-qbounds)/(1.*Lx); qy=2.*M_PI*j/(1.*Ly);

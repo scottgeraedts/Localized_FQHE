@@ -7,10 +7,11 @@ class TorusSolver:public ManySolver<ART>{
 
 public:
 
-	TorusSolver(int Ne,int charge, double V);
+	TorusSolver(int Ne,int charge, double V, int invfilling);
 	void make_Hnn();
 	double numerical_semidefinite_integral(double dx,double start,double tol,double z);
-	void add_disorder(int seed, double V);
+	void add_disorder(int seed, double V,int,int);
+	int EtoPhi(int Ne);
 
 private:
 
@@ -26,65 +27,19 @@ private:
 };
 
 template <class ART>
-TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V):ManySolver<ART>(tNe,tcharge,1){
+TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi):ManySolver<ART>(tNe,tcharge,1){
 	//stuff unique to the torus
-
-	this->NPhi=3*this->Ne;
+	this->NPhi=_NPhi;
+	this->oldNPhi=this->NPhi;
 	Ly=sqrt(M_PI*this->NPhi*this->Ne/2.);//aspect ratio is Lx/Ly=Ne/4
 	Lx=(4/(1.*this->Ne))*Ly;
 
-	//add_disorder(0,0.1);
-	clock_t t;
-	t=clock();
-	this->init();
-	cout<<this->es.eigenvalues().head(1).array()/this->Ne<<" "<<self_energy()<<endl;
-	t=clock()-t;
-	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
-
-	this->cache=1;
-	t=clock();
-	this->init();
-	cout<<this->es.eigenvalues().head(1).array()/this->Ne<<" "<<self_energy()<<endl;
-	t=clock()-t;
-	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
-//	cout<<this->Hnn<<endl;
-
-	this->basis=Eigen::Matrix<ART, -1, -1>::Identity(this->NPhi, this->NPhi);
-	this->basis(0,0)=1/sqrt(2);
-	this->basis(1,0)=-1/sqrt(2);
-	this->basis(0,1)=1/sqrt(2);
-	this->basis(1,1)=1/sqrt(2);
-	
-	this->project=1;
-	t=clock();
-	this->init();
-	cout<<this->es.eigenvalues().head(1).array()/this->Ne+self_energy()<<endl;
-	t=clock()-t;
-	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
-//	cout<<this->Hnn<<endl;
-	
-//	count=0;
-//	Eigen::VectorXd evals;
-//	int N=10;
-//	Eigen::VectorXd sum=Eigen::VectorXd::Zero(N);
-//	int NROD=1;
-//	for(int i=0;i<NROD;i++){
-//		add_disorder(i,V);		
-//		this->init();
-//		sum.array()+=this->es.eigenvalues().head(N).array();
-//		this->single.switchVstrength();
-//		this->init();
-//		sum.array()+=this->es.eigenvalues().head(N).array();
-//	}
-//	sum/=(NROD*2.*this->Ne);
-//	sum.array()+=self_energy();
-//	cout<<V<<" "<<sum.transpose()<<endl;
-
-//	Eigen::VectorXd evec=es.eigenvectors().col(0);
-//	for(int i=0;i<nStates;i++) cout<<states[i]<<" "<<evec(i)<<endl;
-
-//	cout<<self_energy()<<endl;
-	//cout<<count<<endl;
+	this->make_states();
+	this->ZeroHnn();
+	this->es.compute(this->Hnn);
+	Eigen::VectorXd sum=this->es.eigenvalues().array()+self_energy();
+	sum=sum/(1.*this->Ne);
+	cout<<this->Ne<<" "<<sum.transpose()<<endl;
 }
 ///functions which are definitely unique to the torus
 template <class ART>
@@ -166,19 +121,40 @@ double TorusSolver<ART>::self_energy(){
 //compute four-body terms for torus case
 template <class ART>
 ART TorusSolver<ART>::four_body(int a,int b,int c,int d){
-	int start=0, sign=1;
+	int print=0,start=0;
 	ART out=0; double tol=1e-17;
 	double qx,qy,expqy,expqx,temp,qfactor;
-	if ( (a<b) == (c<d) ) sign=-1;
 	
 	for(int my=0;my>-1;my++){
 		if(my==0) qfactor=1.;
-		if(my==0 && a==d) continue; //can't have the qx=qy=0 term
 		else qfactor=2.;
 		
 		qy=2*M_PI/Ly*my;
 		expqy=exp(-0.5*qy*qy);
 		if (expqy<tol) break;
+
+		//a=n1,b=n2,c=n4,d=n3 term
+		if(a<c) start=1;
+		else start=0;
+		for(int p1=start;p1>-1;p1++){
+			qx=2*M_PI/Lx*(a-c)+p1*Ly;
+			expqx=exp(-0.5*qx*qx);
+			if (expqx*expqy<tol) break;			
+			temp=qfactor * expqx*expqy* cos(qy*2*M_PI/Lx*(a-d))* this->V_Coulomb(qx,qy);
+			out-=temp;
+			if(print) cout<<"p+ ac "<<p1<<" "<<temp<<endl;
+		}
+		for(int p1=start-1;p1<1;p1--){
+			qx=2*M_PI/Lx*(a-c)+p1*Ly;
+			expqx=exp(-0.5*qx*qx);
+			if (expqx*expqy<tol) break;			
+			temp=qfactor * expqx*expqy* cos(qy*2*M_PI/Lx*(a-d)) * this->V_Coulomb(qx,qy);
+			out-=temp;
+			if(print) cout<<"p- ac "<<p1<<" "<<temp<<endl;
+		}		
+		
+		if(a==d && my==0) continue;
+
 		//a=n1, d=n4, b=n2, c=n3 term, note that p's are done seperately
 		if (a<d) start=1; 
 		else start=0; //depending on the sign of (a-d), the largest contribution comes from p=1, 0 or -1. start makes sure 1 or -1 is always included
@@ -189,6 +165,7 @@ ART TorusSolver<ART>::four_body(int a,int b,int c,int d){
 			//p2=((c-b)-(a-d)-p1*this->NPhi)/this->NPhi; //don't need this since i'm not including theta_y terms
 			temp=qfactor*expqx*expqy* cos(qy*2*M_PI/Lx*(a-c))*this->V_Coulomb(qx,qy);//used V(qx,qy)=V(qx,-qy), this would need to be more complicated if that weren't true
 			out+=temp;
+			if(print) cout<<"p+ ad "<<p1<<" "<<2*M_PI/Lx*(a-d)<<" "<<p1*Ly<<" "<<temp<<endl;
 		}
 		for(int p1=start-1;p1<1;p1--){
 			qx=2*M_PI/Lx*(a-d)+p1*Ly;
@@ -196,21 +173,28 @@ ART TorusSolver<ART>::four_body(int a,int b,int c,int d){
 			if (expqx*expqy<tol) break;			
 			temp=qfactor*expqx*expqy* cos(qy*2*M_PI/Lx*(a-c))*this->V_Coulomb(qx,qy);
 			out+=temp;
+			if(print) cout<<"p- ad "<<p1<<" "<<temp<<endl;
 		}			
 
+			
+		
 	}
-	return 0.5*sign*out;
+	return out;
 }
+
+template<class ART>
+int TorusSolver<ART>::EtoPhi(int Ne){ return this->inversefilling*Ne; }
+
 //loads single particle class that provides disorder potentials
 template<class ART>
-void TorusSolver<ART>::add_disorder(int seed, double V){
+void TorusSolver<ART>::add_disorder(int seed, double V, int nLow, int nHigh){
 	if(this->has_charge){
 		cout<<"can't add disorder to a system with conserved charge!"<<endl;
 		exit(0);
 	}
 	this->disorder=1;
-	this->single=SingleSolver(this->NPhi,0);
-	this->single.init(seed,V);
+	this->single=SingleSolver(this->oldNPhi,0);
+	this->single.init(seed,V,nLow,nHigh);
 }
 
 //right now this calculates the integral of a Misra function (though you can change the code to make it do any integral from start to infinity)

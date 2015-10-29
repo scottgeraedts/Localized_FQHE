@@ -13,7 +13,7 @@ using namespace std;
 using Eigen::MatrixXcd;
 
 const int DT=1; //fineness of grid used when threading boudary conditions
-const int CUTOFF=2; //max number of times you can hop around the torus in the y direction
+const int CUTOFF=3; //max number of times you can hop around the torus in the y direction
 
 class Potential{
 public:
@@ -34,12 +34,14 @@ private:
 
 class SingleSolver{
 public:
-	SingleSolver(int NPhi,int N_deltas, int NROD=1, int shift=0, double Vstrength=1. );
+	SingleSolver(int NPhi,int N_deltas, int NROD=1, int shift=0, double Vstrength=1., double Lx=0., double Ly=0. );
 	void visualizer();
 	void run();
+	void printEnergy(int nLow, int nHigh);
 	complex<double> getH(int,int);
-	void init(int seed, double V);
+	void init(int seed, double V, int nLow, int nHigh);
 	void switchVstrength();
+	complex<double> evec(int,int);
 
 	SingleSolver () {} 
 //	SingleSolver& operator=(const SingleSolver& other);
@@ -47,17 +49,18 @@ public:
 
 private:
 	int NPhi,qbounds,N_trunc,energy_mesh,NROD,shift;
-	double Lx,Ly,Vstrength;
+	double Vstrength,Lx,Ly;
 	Eigen::MatrixXcd dVdX,dVdY,Hnn;
 	Eigen::VectorXd energies,spacings,energy_hist;
 
 	void make_Hamiltonian(Potential &pot, double theta_x=0., double theta_y=0.);
 	void plot_density(Eigen::SelfAdjointEigenSolver<MatrixXcd> &es, double theta_x=0., double theta_y=0.);
 	void density_near_x(Eigen::SelfAdjointEigenSolver<MatrixXcd> &es, double xloc, double yloc, double theta_x=0., double theta_y=0.);
-	Eigen::MatrixXcd Hnn_to_Hmm(Eigen::SelfAdjointEigenSolver<MatrixXcd> &es);
+	Eigen::MatrixXcd Hnn_to_Hmm(Eigen::SelfAdjointEigenSolver<MatrixXcd> &es, int nLow);
 	Eigen::VectorXd conductivity(Eigen::SelfAdjointEigenSolver<MatrixXcd> &es_m);
 	Eigen::VectorXd ThoulessNumber(Potential &deltas, Potential &gaussian, Eigen::VectorXd &oldEnergies);
 	void print(Eigen::VectorXd &full_sigma, Eigen::VectorXd &full_thouless);
+	Eigen::SelfAdjointEigenSolver<MatrixXcd> proj;
 	
 };
 

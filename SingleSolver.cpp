@@ -1,8 +1,10 @@
 #include "SingleSolver.h"
 
-SingleSolver::SingleSolver(int _NPhi, int N_deltas, int _NROD, int _shift, double _Vstrength):NPhi(_NPhi),NROD(_NROD),shift(_shift),Vstrength(_Vstrength){
-	Lx=sqrt(2*M_PI*NPhi);//square aspect ratio, might want to change this later
-	Ly=Lx;
+SingleSolver::SingleSolver(int _NPhi, int N_deltas, int _NROD, int _shift, double _Vstrength, double _Lx, double _Ly):NPhi(_NPhi),NROD(_NROD),shift(_shift),Vstrength(_Vstrength),Lx(_Lx), Ly(_Ly){
+	if(Lx==0 || Ly==0){
+		Lx=sqrt(2*M_PI*NPhi);//square aspect ratio, might want to change this later
+		Ly=Lx;
+	}
 	qbounds=(CUTOFF+1)*NPhi-1;
 	N_trunc=NPhi-2*N_deltas;
 	energy_mesh=100+1;
@@ -12,19 +14,39 @@ SingleSolver::SingleSolver(int _NPhi, int N_deltas, int _NROD, int _shift, doubl
 }
 
 //the following two functions are designed to be called by a ManySolver
-void SingleSolver::init(int seed,double V){
+void SingleSolver::init(int seed,double V, int nLow, int nHigh){
 	Vstrength=V;
 	map <string, double> params;
+	params["Vstrength"]=100.;
+	params["nLow"]=nLow;
+	params["nHigh"]=nHigh;
+	Potential p_deltas("delta",qbounds,seed,Lx,Ly,params);
+	make_Hamiltonian(p_deltas);
+	Eigen::MatrixXcd old=Hnn;
+	proj.compute(Hnn);
 	params["Vstrength"]=1.;
 	Potential p_gauss("gaussian",qbounds,seed,Lx,Ly,params);
 	make_Hamiltonian(p_gauss);
-	cout<<Hnn<<endl;
+//	cout<<Hnn<<endl;
+//	cout<<proj.eigenvectors()<<endl;
+}
+void SingleSolver::printEnergy(int nLow, int nHigh){
+	N_trunc=NPhi-nLow-nHigh;
+	Eigen::MatrixXcd Hmm=Hnn_to_Hmm(proj, nLow);
+//	cout<<Hmm<<endl;
+	proj.compute(Hmm);
+	cout<<proj.eigenvalues()(0)+proj.eigenvalues()(1)+proj.eigenvalues()(2)+proj.eigenvalues()(3)<<endl;
+//	cout<<proj.eigenvalues()(0)+proj.eigenvalues()(3)<<endl;
+	cout<<proj.eigenvalues()(0)+proj.eigenvalues()(2)<<endl;
+	cout<<proj.eigenvalues()(1)+proj.eigenvalues()(2)<<endl;
 }
 complex<double> SingleSolver::getH(int a,int b){
 	return Vstrength*Hnn(a,b);
 }
 void SingleSolver::switchVstrength(){ Vstrength=-Vstrength; }
-
+complex<double> SingleSolver::evec(int a,int b){
+	return proj.eigenvectors().col(a)(b);
+}
 void SingleSolver::visualizer(){
 	map <string, double> params;
 	params["Vstrength"]=1.;
@@ -65,7 +87,7 @@ void SingleSolver::run(){
 //			if(N_trunc<NPhi) Hmm=Hnn_to_Hmm(es_n);
 //			else Hmm=Hnn;
 			cout<<es_n.eigenvectors()<<endl;
-			Hmm=Hnn_to_Hmm(es_n);
+			Hmm=Hnn_to_Hmm(es_n,(NPhi-N_trunc)/2);
 
 			es_m.compute(Hmm);
 
@@ -134,7 +156,7 @@ Eigen::VectorXd SingleSolver::ThoulessNumber(Potential &deltas, Potential &gauss
 		es_n.compute(Hnn);//diagonalize hamiltonian
 	}
 	make_Hamiltonian(gaussian,M_PI,0.);
-	if(N_trunc<NPhi) Hmm=Hnn_to_Hmm(es_n);
+	if(N_trunc<NPhi) Hmm=Hnn_to_Hmm(es_n,(NPhi-N_trunc)/2);
 	else Hmm=Hnn;
 
 	es_m.compute(Hmm);
@@ -220,13 +242,12 @@ void SingleSolver::make_Hamiltonian(Potential &pot,double theta_x,double theta_y
 	}
 //	return Hnn;
 }
-Eigen::MatrixXcd SingleSolver::Hnn_to_Hmm(Eigen::SelfAdjointEigenSolver<MatrixXcd> &es){
-	Eigen::MatrixXcd Hmm,tempX,tempY;
-	int start=(NPhi-N_trunc)/2;
+Eigen::MatrixXcd SingleSolver::Hnn_to_Hmm(Eigen::SelfAdjointEigenSolver<MatrixXcd> &es, int nLow){
+	Eigen::MatrixXcd Hmm, tempX,tempY;
 	Hmm.resize(N_trunc,N_trunc);
 	tempX.resize(N_trunc,N_trunc);
 	tempY.resize(N_trunc,N_trunc);
-	Eigen::MatrixXcd rect=es.eigenvectors().middleCols(start,N_trunc);
+	Eigen::MatrixXcd rect=es.eigenvectors().middleCols(nLow,N_trunc);
 	Hmm=rect.transpose().conjugate()*Hnn*rect;
 	tempX=rect.transpose().conjugate()*dVdX*rect;
 	tempY=rect.transpose().conjugate()*dVdY*rect;

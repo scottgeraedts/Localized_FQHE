@@ -26,15 +26,16 @@ public:
 	ManySolver(int Ne,int charge,int periodic);
 	void print_H();
 
-	//could make the below virtual if I ever implement another geometry
-	void make_Hnn();
 	void ZeroHnn();
+	void make_Hnn();
 	void disorderHnn();
 //	virtual void make_Hmm();
 	
 protected:
 	int Ne,NPhi,nStates;
+	int lowDeltas,oldNPhi;
 	int charge,has_charge,disorder,periodic,cache,project;
+	int inversefilling,nDeltas;
 	vector<bitset<NBITS> > states;
 	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> Hnn;//ManySolver in Landau basis
 	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> Hmm;//ManySolver in localized basis
@@ -43,9 +44,11 @@ protected:
 	virtual ART two_body(int a,int b) =0;//could make virtual
 	virtual ART four_body(int a,int b,int c,int d) =0;//could make virtual
 	virtual int get_charge(bitset<NBITS> state)=0;//could make virtual
-	
+
+	virtual int EtoPhi(int Ne)=0; //mapping from number of electrons to number of fluxes	
 	void make_cache();
 	vector<ART> four_body_cache, two_body_cache;
+	void do_projection(int nLow, int nHigh);
 	ART four_body_project(int,int,int,int);
 	ART two_body_project(int,int);
 	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> basis;//used to test projection
@@ -58,9 +61,11 @@ protected:
 	SingleSolver single; //for other geometries, this would need to be promoted to a single-electron parent class
 //	virtual void add_disorder()=0;
 	
-	void init();
+	void init(int nd);
 	void make_states();
+	void print_eigenstates();
 	int adjust_sign(int a,int b,bitset<NBITS> state);
+	int adjust_sign(int a,int b, int c, int d, bitset<NBITS> state);
 	int hasbit(int i,int a);
 	int lookup_flipped(bitset<NBITS> i,int a,int b,int c,int d);
 	int lookup_flipped(bitset<NBITS> i,int a,int b);
@@ -85,23 +90,23 @@ ManySolver<ART>::ManySolver(int tNe,int tcharge,int tperiodic):Ne(tNe),charge(tc
 	project=0;
 	if (charge==-1) has_charge=0;
 	else has_charge=1;
+	if(project && has_charge){
+		cout<<"you can't specify a charge if you want to project, so I removed the charge conservation"<<endl;
+		exit(0);
+	}
 }
 template<class ART>
-void ManySolver<ART>::init(){
+void ManySolver<ART>::init(int ndeltas){
 	make_states();
 //	for(int i=0;i<nStates;i++) cout<<states[i]<<" ";
-//	cout<<Hnn<<endl;
+//	cout<<endl;
 
-	if(cache){
-		four_body_cache.resize(pow(NPhi,4));
-		two_body_cache.resize(pow(NPhi,2));
-		make_cache();
-	}
+	if(cache) make_cache();
+	if(project) do_projection(ndeltas);
 	
 	ZeroHnn();	
 	make_Hnn();
-	cout<<Hnn<<endl;
-//	if(disorder) disorderHnn();	
+//	cout<<Hnn<<endl;
 
 //	clock_t t;
 //	t=clock();
@@ -155,13 +160,14 @@ void ManySolver<ART>::make_states(){
 }
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
-	int d,j;
+	int j;
 	ART temp;
 	for(signed int a=0;a<NPhi;a++){
 
 		//terms from the disorder potential
 		if(disorder){
 			for(int b=0;b<NPhi;b++){
+//				cout<<"get disorder "<<a<<" "<<b<<"....";
 				temp=get_disorder(a,b);
 				for(int i=0;i<(signed)nStates;i++){
 					if (states[i].test(a) && (b==a || !states[i].test(b)) ){
@@ -172,60 +178,48 @@ void ManySolver<ART>::make_Hnn(){
 			}
 		}
 
-		for(signed int b=0;b<NPhi;b++){
-			if(b==a) continue;
-			if (b>a){
-				temp=get_interaction(a,b);
-				for(int i=0;i<nStates;i++)
-					if (states[i].test(a) && states[i].test(b)) Hnn(i,i)+=temp;
-			}
+		for(signed int b=a+1;b<NPhi;b++){
+//			if (b>a){
+//				temp=get_interaction(a,b);
+//				for(int i=0;i<nStates;i++)
+//					if (states[i].test(a) && states[i].test(b)) Hnn(i,i)+=temp;
+//			}
 						
-			//a+b=c+d, this sets some restrictions on which c and d need to be summed over
-			//on a sphere, there are already restrictions on the possible c, though on the torus more c's are possible (its difficult to a priori determine which ones)
-			int c_upper,c_lower;
-			if(periodic){
-				c_upper=NPhi; c_lower=0;
-			}else{
-				if (a+b>=NPhi){
-					c_upper=NPhi; c_lower=a+b-NPhi+1;
-				}else{
-					c_upper=a+b; c_lower=0;
-				}
-			}
-			for(int c=c_lower;c<c_upper;c++){
-				if ((a+b-c)<0) d=a+b-c+NPhi;
-				else d=(a+b-c)%NPhi;
-				if ( d==c) continue;
-				if(a==c || a==d || b==c|| b==d) continue;
-				temp=get_interaction(a,b,c,d);
-				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
-				for(int i=0;i<nStates;i++){
-					if(states[i].test(a) && states[i].test(b) && ( (!states[i].test(c) && !states[i].test(d)) ) ) { //|| (a==d && c==b) || (a==c && b==d) ) )  {
-						j=lookup_flipped(states[i],a,b,c,d);
-						Hnn(i,j)+=(double)(adjust_sign(a,b,states[i])*adjust_sign(c,d,states[i])) * temp;
+			for(int c=0;c<NPhi;c++){
+				for(int d=0;d<c;d++){
+					temp=get_interaction(a,b,c,d);
+					if(!project) //if we are not projecting into a different subspace, then this term conserves momentum and we can skip some elements in the sum
+						if( (periodic && (a+b)%NPhi != (c+d)%NPhi) || (!periodic && a+b!=c+d) ) continue;
+	//				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
+					for(int i=0;i<nStates;i++){
+						if(states[i].test(a) && states[i].test(b) && (!states[i].test(c)  || c==a || c==b) && (!states[i].test(d) || a==d || b==d) )  {
+							j=lookup_flipped(states[i],a,b,c,d);
+							Hnn(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
+						}
 					}
-				}	
-			}	
-		}
-	}
+				}//d	
+			}//c	
+		}//b
+	}//a
 }
 
 template<class ART>
 void ManySolver<ART>::make_cache(){
 	int d;
 	ART temp;
+	four_body_cache.resize(pow(NPhi,4));
+	two_body_cache.resize(pow(NPhi,2));
 	
 	for(signed int a=0;a<NPhi;a++){
 		//terms from the disorder potential
 		if(disorder){
 			for(signed int b=0;b<NPhi;b++){		
-				two_body_cache[four_array_map(a,b,0,0)]=single.getH(a,b);
+				two_body_cache[four_array_map(a,b,0,0)]=single.getH(b,a);
 			}
 		}
-		for(signed int b=0;b<NPhi;b++){
-			if (b==a) continue;
+		for(signed int b=a+1;b<NPhi;b++){
 
-			if(b>a) four_body_cache[four_array_map(a,b,b,a)]=two_body(a,b);		
+//			if(b>a) four_body_cache[four_array_map(a,b,b,a)]=two_body(a,b);		
 			//a+b=c+d, this sets some restrictions on which c and d need to be summed over
 			//on a sphere, there are already restrictions on the possible c, though on the torus more c's are possible (its difficult to a priori determine which ones)
 			int c_upper,c_lower;
@@ -241,8 +235,7 @@ void ManySolver<ART>::make_cache(){
 			for(int c=c_lower;c<c_upper;c++){
 				if ((a+b-c)<0) d=a+b-c+NPhi;
 				else d=(a+b-c)%NPhi;
-				if (d==c) continue;
-				if (a==c || a==d || b==c ||b==d) continue;
+				if (d>=c) continue;
 				four_body_cache[four_array_map(a,b,c,d)]=four_body(a,b,c,d);
 			}	
 		}
@@ -275,15 +268,18 @@ void ManySolver<ART>::disorderHnn(){
 	}
 }
 template<class ART>
-void ManySolver<ART>::ZeroHnn(){ Hnn=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);}
+void ManySolver<ART>::ZeroHnn(){ 
+	Hnn=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
+	make_Hnn(); 
+}
 
 //returns the interaction terms from a Hamiltonian
-template<class ART>
-ART ManySolver<ART>::get_interaction(int a,int b){
-	if(!cache) return two_body(a,b);
-	else if(!project) return four_body_cache[four_array_map(a,b,b,a)];
-	else return four_body_project(a,b,a,b);
-}
+//template<class ART>
+//ART ManySolver<ART>::get_interaction(int a,int b){
+//	if(!cache) return two_body(a,b);
+//	else if(!project) return four_body_cache[four_array_map(a,b,b,a)];
+//	else return four_body_project(a,b,a,b);
+//}
 template<class ART>
 ART ManySolver<ART>::get_interaction(int a,int b,int c, int d){
 	if(!cache) return four_body(a,b,c,d);
@@ -294,40 +290,49 @@ ART ManySolver<ART>::get_interaction(int a,int b,int c, int d){
 //returns the disorder terms from a Hamiltonian
 template<class ART>
 ART ManySolver<ART>::get_disorder(int a, int b){
-	if(!cache) return single.getH(a,b);
+	if(!cache) return single.getH(b,a);
 	else if(!project) return two_body_cache[four_array_map(a,b,0,0)];
 	else return two_body_project(a,b);
 }
 
 //maps indices from a four array to indices from a 1 array
 template<class ART>
-int ManySolver<ART>::four_array_map(int a,int b,int c, int d){ return a+b*NPhi+c*NPhi*NPhi+d*pow(NPhi,3); }
+int ManySolver<ART>::four_array_map(int a,int b,int c, int d){ return a+b*oldNPhi+c*oldNPhi*oldNPhi+d*pow(oldNPhi,3); }
 
 template<class ART>
 ART ManySolver<ART>::four_body_project(int a,int b,int c,int d){
 	ART out=0;
-	int id;
-	for(int ia=0;ia<NPhi;ia++){
-		for(int ib=0;ib<NPhi;ib++){
+	int id, sa,sb,sc,sd,signAB, signCD;
+	for(int ia=0;ia<oldNPhi;ia++){
+		for(int ib=0;ib<oldNPhi;ib++){
 			if (ib==ia) continue;
 
+			if(ib<ia){
+				sa=ib; sb=ia; signAB=-1;
+			}else{
+				sa=ia; sb=ib; signAB=1;
+			}
 			//pick bounds on c
 			int c_upper,c_lower;
 			if(periodic){
-				c_upper=NPhi; c_lower=0;
+				c_upper=oldNPhi; c_lower=0;
 			}else{
-				if (a+b>=NPhi){
-					c_upper=NPhi; c_lower=a+b-NPhi+1;
+				if (a+b>=oldNPhi){
+					c_upper=oldNPhi; c_lower=a+b-oldNPhi+1;
 				}else{
 					c_upper=a+b; c_lower=0;
 				}
 			}
 			for(int ic=c_lower;ic<c_upper;ic++){
-				if ((ia+ib-ic)<0) id=ia+ib-ic+NPhi;
-				else id=(ia+ib-ic)%NPhi;				
+				if ((ia+ib-ic)<0) id=ia+ib-ic+oldNPhi;
+				else id=(ia+ib-ic)%oldNPhi;				
 				if (id==ic) continue;
-					
-				out+=basis(a,ia)*basis(b,ib)*basis(c,ic)*basis(d,id)*four_body_cache[four_array_map(ia,ib,ic,id)];
+				if(id>ic){
+					sc=id; sd=ic; signCD=-1;
+				}else{
+					sc=ic; sd=id; signCD=1;
+				}
+				out+=(double)(signAB*signCD)*single.evec(a+lowDeltas,ia)*single.evec(b+lowDeltas,ib)*conj(single.evec(c+lowDeltas,ic))*conj(single.evec(d+lowDeltas,id))*four_body_cache[four_array_map(sa,sb,sc,sd)];
 			}
 		}
 	}
@@ -336,12 +341,26 @@ ART ManySolver<ART>::four_body_project(int a,int b,int c,int d){
 template<class ART>
 ART ManySolver<ART>::two_body_project(int a,int b){
 	ART out=0;
-	for(int ia=0;ia<NPhi;ia++){
-		for(int ib=0;ib<NPhi;ib++){
-			out+=basis(a,ia)*basis(b,ib)*two_body_cache[four_array_map(ia,ib,0,0)];
+	for(int ia=0;ia<oldNPhi;ia++){
+		for(int ib=0;ib<oldNPhi;ib++){
+	//		cout<<ia<<" "<<ib<<" "<<single.evec(a+lowDeltas, ia)<<" "<<
+			out+=single.evec(a+lowDeltas,ia)*conj(single.evec(b+lowDeltas,ib))*two_body_cache[four_array_map(ia,ib,0,0)];
 		}
 	}
+//	cout<<a<<" "<<b<<" **************"<<out<<endl;
 	return out;
+}
+
+template<class ART>
+void ManySolver<ART>::do_projection(int nLow,int nHigh){
+	if(cache!=1){
+		cout<<"you can't project if you haven't cached the unprojected potentials!"<<endl;
+		exit(0);
+	}
+	project=1;
+	lowDeltas=nLow;
+	NPhi=oldNPhi-nLow-nHigh;
+	make_states();
 }
 
 //a Coulomb interaction
@@ -362,6 +381,23 @@ int ManySolver<ART>::adjust_sign(int a,int b,bitset<NBITS> state){
 		if(state.test(i)) sign*=-1;
 	return sign;	
 }
+//puts in minus signs for correct Fermi statistics
+//for four-body terms, we have something like c^dagger_a c_d. This gives a (-1) for every electron between a and d
+//this also works fine when you consider that we are performing two hops
+template<class ART>
+int ManySolver<ART>::adjust_sign(int a,int b,int c,int d,bitset<NBITS> state){
+	int sign=1;
+	int start=a, end=b;
+	if (a>b){ start=b; end=a;}
+	for(int i=start+1;i<end;i++)
+		if(state.test(i) && i!=c && i!=d) sign*=-1;
+	start=c, end=d;
+	if (c>d){ start=d; end=c;}
+	for(int i=start+1;i<end;i++)
+		if(state.test(i) && i!=a && i!=b) sign*=-1;
+	return sign;	
+}
+
 template<class ART>
 int ManySolver<ART>::lookup_flipped(bitset<NBITS> state,int a,int b,int c,int d){
 //given a bitstring, finds its index in the bitstring array
