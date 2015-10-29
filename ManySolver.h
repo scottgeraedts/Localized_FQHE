@@ -11,8 +11,6 @@
 #include <Eigen/Dense>
 #include "math.h"
 #include <ctime>
-#include "lapacke.h"
-#include "matrixcontainer.h"
 #include "SingleSolver.h"
 
 //will use std::bitset library to store bits, which needs to know the number of bits at compile time
