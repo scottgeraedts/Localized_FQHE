@@ -4,9 +4,8 @@
 CC=g++
 LIBDIR=/home/sgeraedt/Localized_FQHE/
 MYDIR=/home/sgeraedt/sources/lapack-3.5.0/lapacke/include/
-MATPRODDIR=/home/sgeraedt/Polisher/ #this is where matprod.h can be found
 ARPACKPP_DIR = /home/sgeraedt/sources/arpack++/include/
-CFLAGS=-c -O3 -Wall -I$(LIBDIR) -I$(MYDIR) -I$(MATPRODDIR) -I$(ARPACKPP_DIR)
+CFLAGS=-c -O3 -Wall -I$(LIBDIR) -I$(MYDIR) -I$(ARPACKPP_DIR)
 #LDFLAGS=-I$(LIBDIR) -I$(MYDIR) 
 SOURCES= main.cpp SingleSolver.cpp Potential.cpp
 OBJECTS=$(SOURCES:.cpp=.o) 

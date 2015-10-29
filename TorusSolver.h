@@ -1,6 +1,8 @@
 #ifndef TORUS_SOLVER_H
 #define TORUS_SOLVER_H
 #include "ManySolver.h"
+#include "matrixcontainer.h"
+#include "arscomp.h"
 
 template <class ART>
 class TorusSolver:public ManySolver<ART>{
@@ -22,6 +24,8 @@ private:
 
 	ART two_body(int a,int b);//could make virtual
 	ART four_body(int a,int b,int c,int d);//could make virtual
+	ART four_body_coulomb(int a,int b, int c, int d);
+	double Hermite(double x,int n);
 	int get_charge(bitset<NBITS> state);//could make virtual
 
 };
@@ -36,10 +40,28 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi):ManySolv
 
 	this->make_states();
 	this->ZeroHnn();
+
+	clock_t t;
+	t=clock();
 	this->es.compute(this->Hnn);
-	Eigen::VectorXd sum=this->es.eigenvalues().array()+self_energy();
+	t=clock()-t;
+	cout<<"eigen: "<<((float)t)/CLOCKS_PER_SEC<<" seconds"<<endl;	
+	Eigen::VectorXd sum=this->es.eigenvalues();
 	sum=sum/(1.*this->Ne);
-	cout<<this->Ne<<" "<<sum.transpose()<<endl;
+	double se=self_energy();
+	sum=sum.array()+se;
+	cout<<this->Ne<<" "<<tcharge<<" "<<sum.transpose()<<endl;
+
+//****A call to ARPACK++. The fastest of all methods, but I don't know how to get it to work for complex numbers right now
+	MatrixContainer<ART> mat(this->nStates,this->Hnn);
+	t=clock();
+    ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), 9, &mat, &MatrixContainer<ART>::MultMv,"LM");//someday put this part into matprod?
+    dprob.FindEigenvalues();
+	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i)/(1.*this->Ne)+se<<endl;
+
+	t=clock()-t;
+	cout<<"arpack: "<<((float)t)/CLOCKS_PER_SEC<<" seconds"<<endl;	
+
 }
 ///functions which are definitely unique to the torus
 template <class ART>
@@ -180,6 +202,24 @@ ART TorusSolver<ART>::four_body(int a,int b,int c,int d){
 		
 	}
 	return out;
+}
+
+//template<class ART>
+//ART TorusSolver<ART>::four_body(a,b,c,d){
+//	return Hermite(0.5*(a-b),1)*Hermite(0.5*(c-d),1)*exp(-0.25*(a-b)*(a-b)-0.25*(c-d)*(c-d));
+//}
+//Hermite polynomials (using the 'probabalist' definition, see the wikipedia entry)
+template<class ART>
+double TorusSolver<ART>::Hermite(double x, int n){
+	if(n==0)
+		return 0;
+	else if (n==1) return x;
+	else if(n==2) return x*x-1;
+	else if(n==3) return x*x*x-3*x;
+	else{
+		cout<<"asked for too large a Hermite polynomial, you should define more!"<<endl;
+		exit(0);
+	}
 }
 
 template<class ART>

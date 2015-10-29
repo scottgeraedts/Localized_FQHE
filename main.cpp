@@ -12,8 +12,8 @@ int main(int argc, char** argv) {
 	params>>Ne;
 	params>>charge;
 	params>>V;
-	TorusSolver<complex<double> > H(3,charge,0.1,3*3);
-	for(int i=4;i<7;i++) H=TorusSolver<complex<double> >(i,charge,i*0.1,3*i);
+	TorusSolver<complex<double> > H(Ne,charge,0.1,3*Ne);
+	//for(int i=1;i<Ne;i++) H=TorusSolver<complex<double> >(Ne,i,0.1,3*Ne);
 //	TorusSolver<double> H(Ne,charge);
 
 }
