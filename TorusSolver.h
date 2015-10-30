@@ -25,6 +25,7 @@ private:
 	ART two_body(int a,int b);//could make virtual
 	ART four_body(int a,int b,int c,int d);//could make virtual
 	ART four_body_coulomb(int a,int b, int c, int d);
+	ART four_body_haldane(int a,int b, int c, int d);
 	double Hermite(double x,int n);
 	int get_charge(bitset<NBITS> state);//could make virtual
 
@@ -38,29 +39,32 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi):ManySolv
 	Ly=sqrt(M_PI*this->NPhi*this->Ne/2.);//aspect ratio is Lx/Ly=Ne/4
 	Lx=(4/(1.*this->Ne))*Ly;
 
+
 	this->make_states();
 	this->ZeroHnn();
-
-	clock_t t;
-	t=clock();
 	this->es.compute(this->Hnn);
-	t=clock()-t;
-	cout<<"eigen: "<<((float)t)/CLOCKS_PER_SEC<<" seconds"<<endl;	
 	Eigen::VectorXd sum=this->es.eigenvalues();
 	sum=sum/(1.*this->Ne);
 	double se=self_energy();
 	sum=sum.array()+se;
-	cout<<this->Ne<<" "<<tcharge<<" "<<sum.transpose()<<endl;
+	int stop=1e8;
+	if(this->nStates<stop) stop=this->nStates;
+	stringstream filename;
+	filename.str("");
+	filename<<(1.*this->NPhi)/(1.*this->Ne)<<"_"<<this->Ne<<"h";
+	ofstream cfout(filename.str().c_str(),ofstream::app);
+	for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
+	cfout.close();
 
 //****A call to ARPACK++. The fastest of all methods, but I don't know how to get it to work for complex numbers right now
-	MatrixContainer<ART> mat(this->nStates,this->Hnn);
-	t=clock();
-    ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), 9, &mat, &MatrixContainer<ART>::MultMv,"LM");//someday put this part into matprod?
-    dprob.FindEigenvalues();
-	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i)/(1.*this->Ne)+se<<endl;
+//	MatrixContainer<ART> mat(this->nStates,this->Hnn);
+//	t=clock();
+//    ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), 9, &mat, &MatrixContainer<ART>::MultMv,"LM");//someday put this part into matprod?
+//    dprob.FindEigenvalues();
+//	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i)/(1.*this->Ne)+se<<endl;
 
-	t=clock()-t;
-	cout<<"arpack: "<<((float)t)/CLOCKS_PER_SEC<<" seconds"<<endl;	
+//	t=clock()-t;
+//	cout<<"arpack: "<<((float)t)/CLOCKS_PER_SEC<<" seconds"<<endl;	
 
 }
 ///functions which are definitely unique to the torus
@@ -142,7 +146,7 @@ double TorusSolver<ART>::self_energy(){
 }
 //compute four-body terms for torus case
 template <class ART>
-ART TorusSolver<ART>::four_body(int a,int b,int c,int d){
+ART TorusSolver<ART>::four_body_coulomb(int a,int b,int c,int d){
 	int print=0,start=0;
 	ART out=0; double tol=1e-17;
 	double qx,qy,expqy,expqx,temp,qfactor;
@@ -204,10 +208,53 @@ ART TorusSolver<ART>::four_body(int a,int b,int c,int d){
 	return out;
 }
 
-//template<class ART>
-//ART TorusSolver<ART>::four_body(a,b,c,d){
-//	return Hermite(0.5*(a-b),1)*Hermite(0.5*(c-d),1)*exp(-0.25*(a-b)*(a-b)-0.25*(c-d)*(c-d));
-//}
+template<class ART>
+ART TorusSolver<ART>::four_body_haldane(int a, int b, int c, int d){
+	int m=a-d, k=a-c; //these are the indices defined in Roger and Mike's paper they are the two variables left after COM and momentum conservation
+	//V=H((m+k)/2)H((m-k)/2), but need to take the PBC into account
+	double out=0,expm,expk,qm,qk,tol=1e-12;
+	int startm=0, startk=0;
+	if(m<0) startm=1;
+	if(k<0) startk=1;
+	
+	for(int pm=startm; pm>-1;pm++){
+		qm=2.*M_PI*(m+pm*this->oldNPhi)/Lx;
+		expm=exp(-0.5*qm*qm);
+		if (expm<tol) break;
+		for(int pk=startk; pk>-1;pk++){
+			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
+			expk=exp(-0.5*qk*qk);
+			if(expk<tol) break;
+			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qm-qk),1);
+		}
+		for(int pk=startk-1; pk<1;pk--){
+			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
+			expk=exp(-0.5*qk*qk);
+			if(expk<tol) break;
+			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qm-qk),1);
+		}
+	}
+	for(int pm=startm-1; pm<1;pm--){
+		qm=2.*M_PI*(m+pm*this->oldNPhi)/Lx;
+		expm=exp(-0.5*qm*qm);
+		if (expm<tol) break;
+		for(int pk=startk; pk>-1;pk++){
+			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
+			expk=exp(-0.5*qk*qk);
+			if(expk<tol) break;
+			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qm-qk),1);
+		}
+		for(int pk=startk-1; pk<1;pk--){
+			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
+			expk=exp(-0.5*qk*qk);
+			if(expk<tol) break;
+			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qm-qk),1);
+		}
+	}		
+	return 2*out;//here swapping c&d gives the same thing up to a - sign that accounts for fermion parity, so just 
+}
+template<class ART>
+ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ return four_body_haldane(a,b,c,d);}
 //Hermite polynomials (using the 'probabalist' definition, see the wikipedia entry)
 template<class ART>
 double TorusSolver<ART>::Hermite(double x, int n){
