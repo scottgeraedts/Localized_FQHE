@@ -177,6 +177,7 @@ void ManySolver<ART>::make_Hnn(){
 		}
 
 		for(signed int b=a+1;b<NPhi;b++){
+<<<<<<< Updated upstream
 //			if (b>a){
 //				temp=get_interaction(a,b);
 //				for(int i=0;i<nStates;i++)
@@ -194,6 +195,41 @@ void ManySolver<ART>::make_Hnn(){
 							j=lookup_flipped(states[i],a,b,c,d);
 							Hnn(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}
+=======
+			if(b==a) continue;
+			
+			//this is for `two body' terms which are four-body interaction terms where the indices come in pairs
+			temp=get_interaction(a,b);
+			for(int i=0;i<(signed)nStates;i++){
+				if(states[i].test(a) && states[i].test(b)){
+					Hnn(i,i)+=temp;
+				}
+			}
+			
+			//a+b=c+d, this sets some restrictions on which c and d need to be summed over
+			//on a sphere, there are already restrictions on the possible c, though on the torus more c's are possible (its difficult to a priori determine which ones)
+			int c_upper,c_lower;
+			if(periodic){
+				c_upper=NPhi; c_lower=0;
+			}else{
+				if (a+b>=NPhi){
+					c_upper=NPhi; c_lower=a+b-NPhi+1;
+				}else{
+					c_upper=a+b; c_lower=0;
+				}
+			}
+			for(int c=c_lower;c<c_upper;c++){
+				if (c==a || c==b) continue;				
+				if ((a+b-c)<0) d=a+b-c+NPhi;
+				else d=(a+b-c)%NPhi;
+				if (d==a || d==b || d<=c) continue;
+				temp=get_interaction(a,b,c,d);
+				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
+				for(int i=0;i<nStates;i++){
+					if(states[i].test(a) && states[i].test(b) && !states[i].test(c) && !states[i].test(d)){
+						j=lookup_flipped(states[i],a,b,c,d);
+						Hnn(i,j)+=(double)(adjust_sign(a,b,states[i])*adjust_sign(c,d,states[i])) * temp;
+>>>>>>> Stashed changes
 					}
 				}//d	
 			}//c	

@@ -44,6 +44,8 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi):ManySolv
 	clock_t t;
 	t=clock();
 	this->es.compute(this->Hnn);
+	this->init();
+	cout<<this->es.eigenvalues().head(1).array()/this->Ne+self_energy()<<endl;
 	t=clock()-t;
 	cout<<"eigen: "<<((float)t)/CLOCKS_PER_SEC<<" seconds"<<endl;	
 	Eigen::VectorXd sum=this->es.eigenvalues();
@@ -59,6 +61,24 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi):ManySolv
     dprob.FindEigenvalues();
 	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i)/(1.*this->Ne)+se<<endl;
 
+	this->cache=1;
+	t=clock();
+	this->init();
+	cout<<this->es.eigenvalues().head(1).array()/this->Ne+self_energy()<<endl;
+	t=clock()-t;
+	cout<<"time: "<<((float)t)/CLOCKS_PER_SEC<<endl;
+//	cout<<this->Hnn<<endl;
+
+	this->basis=Eigen::Matrix<ART, -1, -1>::Identity(this->NPhi, this->NPhi);
+	this->basis(0,0)=1/sqrt(2);
+	this->basis(1,0)=-1/sqrt(2);
+	this->basis(0,1)=1/sqrt(2);
+	this->basis(1,1)=1/sqrt(2);
+	
+	this->project=1;
+	t=clock();
+	this->init();
+	cout<<this->es.eigenvalues().head(1).array()/this->Ne+self_energy()<<endl;
 	t=clock()-t;
 	cout<<"arpack: "<<((float)t)/CLOCKS_PER_SEC<<" seconds"<<endl;	
 
