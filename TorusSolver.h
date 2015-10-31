@@ -42,29 +42,36 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi):ManySolv
 
 	this->make_states();
 	this->ZeroHnn();
-	this->es.compute(this->Hnn);
-	Eigen::VectorXd sum=this->es.eigenvalues();
-	sum=sum/(1.*this->Ne);
 	double se=self_energy();
-	sum=sum.array()+se;
-	int stop=1e8;
-	if(this->nStates<stop) stop=this->nStates;
+	int stop=10;	
 	stringstream filename;
 	filename.str("");
 	filename<<(1.*this->NPhi)/(1.*this->Ne)<<"_"<<this->Ne<<"h";
 	ofstream cfout(filename.str().c_str(),ofstream::app);
-	for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
+	
+//	this->es.compute(this->Hnn);
+//	Eigen::VectorXd sum=this->es.eigenvalues();
+//	sum=sum.array()+se;
+//	sum=sum/(1.*this->Ne);
+	if(this->nStates<stop) stop=this->nStates;
+
+//****A call to ARPACK++. The fastest of all methods
+	MatrixContainer<ART> mat(this->nStates,this->Hnn);
+//	complex<double> *v=new complex<double>[this->nStates];
+//	v[0]=complex<double>(1,0);
+//	for(int i=1;i<this->nStates;i++) v[i]=complex<double>(0,0);
+//	complex<double> *w=new complex<double>[this->nStates];
+//	mat.MultMv(v,w);
+//	cout<<this->Hnn<<endl;
+//	for(int i=0;i<this->nStates;i++) cout<<w[i]<<endl;
+//	delete [] w;
+//	delete [] v;
+    ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"LM");//someday put this part into matprod?
+    dprob.FindEigenvalues();
+	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cfout<<dprob.Eigenvalue(i)/(1.*this->Ne)+se<<endl;
+
+	//for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
 	cfout.close();
-
-//****A call to ARPACK++. The fastest of all methods, but I don't know how to get it to work for complex numbers right now
-//	MatrixContainer<ART> mat(this->nStates,this->Hnn);
-//	t=clock();
-//    ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), 9, &mat, &MatrixContainer<ART>::MultMv,"LM");//someday put this part into matprod?
-//    dprob.FindEigenvalues();
-//	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i)/(1.*this->Ne)+se<<endl;
-
-//	t=clock()-t;
-//	cout<<"arpack: "<<((float)t)/CLOCKS_PER_SEC<<" seconds"<<endl;	
 
 }
 ///functions which are definitely unique to the torus
@@ -225,13 +232,13 @@ ART TorusSolver<ART>::four_body_haldane(int a, int b, int c, int d){
 			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
 			expk=exp(-0.5*qk*qk);
 			if(expk<tol) break;
-			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qm-qk),1);
+			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);
 		}
 		for(int pk=startk-1; pk<1;pk--){
 			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
 			expk=exp(-0.5*qk*qk);
 			if(expk<tol) break;
-			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qm-qk),1);
+			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);
 		}
 	}
 	for(int pm=startm-1; pm<1;pm--){
@@ -242,19 +249,19 @@ ART TorusSolver<ART>::four_body_haldane(int a, int b, int c, int d){
 			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
 			expk=exp(-0.5*qk*qk);
 			if(expk<tol) break;
-			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qm-qk),1);
+			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);
 		}
 		for(int pk=startk-1; pk<1;pk--){
 			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
 			expk=exp(-0.5*qk*qk);
 			if(expk<tol) break;
-			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qm-qk),1);
+			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);
 		}
 	}		
 	return 2*out;//here swapping c&d gives the same thing up to a - sign that accounts for fermion parity, so just 
 }
 template<class ART>
-ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ return four_body_haldane(a,b,c,d);}
+ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ return four_body_coulomb(a,b,c,d);}
 //Hermite polynomials (using the 'probabalist' definition, see the wikipedia entry)
 template<class ART>
 double TorusSolver<ART>::Hermite(double x, int n){

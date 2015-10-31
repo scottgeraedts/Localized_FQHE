@@ -14,7 +14,7 @@ EXECUTABLE=a.out
 all: $(SOURCES) $(EXECUTABLE)
 	
 $(EXECUTABLE): $(OBJECTS) 
-	$(CC) -I$(MYDIR) $(OBJECTS) -larpack -llapacke -llapack -lrefblas -lgfortran -o $@ 
+	$(CC) -I$(MYDIR) $(OBJECTS) -larpack -llapacke -llapack -lcblas -lrefblas -lgfortran -o $@ 
 	
 .cpp.o:
 	$(CC) $(CFLAGS) $< -o $@

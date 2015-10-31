@@ -5,6 +5,7 @@
 #define MATRIXCONTAINER_H
 
 #include "matprod.h"
+#include "cblas.h"
 #include <Eigen/Core>
 using namespace std;
 
@@ -13,6 +14,7 @@ class MatrixContainer: public MatrixWithProduct<ART> {
 
  private:
 	Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic> * H;
+	Eigen::Matrix<ART, Eigen::Dynamic, 1> out;
 	
  public:
 
@@ -33,12 +35,24 @@ inline MatrixContainer<ART>::MatrixContainer(int n, Eigen::Matrix<ART, Eigen::Dy
 //  Matrix-vector multiplication w <- M*v.
 template<class ART>
 void MatrixContainer<ART>::MultMv(ART* v, ART* w){
-	for(int i=0;i<this->ncols();i++) w[i]=0;
+//	Eigen::Map< Eigen::Matrix<ART, Eigen::Dynamic, 1> > wv(v, this->ncols(), 1);
+//	for(int i=0;i<this->ncols();i++) cout<<wv(i)<<" ";
+//	cout<<endl;
+//	out=(*H)*wv;
+//	for(int i=0;i<this->ncols();i++) cout<<out(i)<<" ";
+//	cout<<endl;
+//	w=out.data();
+//	for(int i=0;i<this->ncols();i++) cout<<w[i]<<" ";
+//	cout<<endl;
 	
-	for(int i=0;i<this->ncols(); i++){
-		for(int j=0;j<this->ncols(); j++)
-			w[i]+=(*H)(i,j)*v[j];
-	}	
+	double alpha=1., beta=0.;
+	cblas_zgemv(CblasColMajor, CblasNoTrans, this->ncols(), this->ncols(), &alpha, (*H).data(), this->ncols(), v, 1, &beta, w, 1);
+//	for(int i=0;i<this->ncols();i++) w[i]=0;
+//	
+//	for(int i=0;i<this->ncols(); i++){
+//		for(int j=0;j<this->ncols(); j++)
+//			w[i]+=(*H)(i,j)*v[j];
+//	}	
 } //  MultMv.
 
 template<class ART>

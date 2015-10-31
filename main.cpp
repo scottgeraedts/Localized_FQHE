@@ -13,12 +13,12 @@ int main(int argc, char** argv) {
 	params>>NPhi;
 	params>>charge;
 	params>>V;
-	TorusSolver<complex<double> > H(3,0,V,3*3);
-	for(int e=2;e<=3;e++){
-		for(int n=4;n<=6;n++){ 
-			for(int i=0;i<e*n;i++)
-				H=TorusSolver<complex<double> >(n,i,0.1,e*n);
-		}
-	}
+	TorusSolver<complex<double> > H(Ne,2,V,NPhi*Ne);
+//	for(int e=2;e<=3;e++){
+//		for(int n=4;n<=6;n++){ 
+//			for(int i=0;i<e*n;i++)
+//				H=TorusSolver<complex<double> >(n,i,0.1,e*n);
+//		}
+//	}
 
 }
