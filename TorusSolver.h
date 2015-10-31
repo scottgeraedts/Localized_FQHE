@@ -9,7 +9,7 @@ class TorusSolver:public ManySolver<ART>{
 
 public:
 
-	TorusSolver(int Ne,int charge, double V, int invfilling);
+	TorusSolver(int Ne,int charge, double V, int invfilling, string name);
 	void make_Hnn();
 	double numerical_semidefinite_integral(double dx,double start,double tol,double z);
 	void add_disorder(int seed, double V,int,int);
@@ -32,7 +32,7 @@ private:
 };
 
 template <class ART>
-TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi):ManySolver<ART>(tNe,tcharge,1){
+TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string name):ManySolver<ART>(tNe,tcharge,1){
 	//stuff unique to the torus
 	this->NPhi=_NPhi;
 	this->oldNPhi=this->NPhi;
@@ -40,37 +40,30 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi):ManySolv
 	Lx=(4/(1.*this->Ne))*Ly;
 
 
+	cout<<"run with Ne="<<this->Ne<<endl;
 	this->make_states();
 	this->ZeroHnn();
 	double se=self_energy();
 	int stop=10;	
+	if(this->nStates<stop) stop=this->nStates-1;
 	stringstream filename;
 	filename.str("");
-	filename<<(1.*this->NPhi)/(1.*this->Ne)<<"_"<<this->Ne<<"h";
+	filename<<"gaps/"<<name<<"_"<<this->Ne<<"s";
 	ofstream cfout(filename.str().c_str(),ofstream::app);
 	
 //	this->es.compute(this->Hnn);
 //	Eigen::VectorXd sum=this->es.eigenvalues();
-//	sum=sum.array()+se;
 //	sum=sum/(1.*this->Ne);
+//	sum=sum.array()+se;
 	if(this->nStates<stop) stop=this->nStates;
 
 //****A call to ARPACK++. The fastest of all methods
 	MatrixContainer<ART> mat(this->nStates,this->Hnn);
-//	complex<double> *v=new complex<double>[this->nStates];
-//	v[0]=complex<double>(1,0);
-//	for(int i=1;i<this->nStates;i++) v[i]=complex<double>(0,0);
-//	complex<double> *w=new complex<double>[this->nStates];
-//	mat.MultMv(v,w);
-//	cout<<this->Hnn<<endl;
-//	for(int i=0;i<this->nStates;i++) cout<<w[i]<<endl;
-//	delete [] w;
-//	delete [] v;
-    ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"LM");//someday put this part into matprod?
+    ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"SM",(int)0, 1e-10,1e6);//someday put this part into matprod?
     dprob.FindEigenvalues();
-	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cfout<<dprob.Eigenvalue(i)/(1.*this->Ne)+se<<endl;
+	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cfout<<tcharge<<" "<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<endl;
 
-	//for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
+//	for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
 	cfout.close();
 
 }
@@ -261,7 +254,7 @@ ART TorusSolver<ART>::four_body_haldane(int a, int b, int c, int d){
 	return 2*out;//here swapping c&d gives the same thing up to a - sign that accounts for fermion parity, so just 
 }
 template<class ART>
-ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ return four_body_coulomb(a,b,c,d);}
+ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ return four_body_haldane(a,b,c,d);}
 //Hermite polynomials (using the 'probabalist' definition, see the wikipedia entry)
 template<class ART>
 double TorusSolver<ART>::Hermite(double x, int n){
