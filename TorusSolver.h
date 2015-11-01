@@ -63,6 +63,7 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
     dprob.FindEigenvalues();
 	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cfout<<tcharge<<" "<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<endl;
 
+<<<<<<< HEAD
 //	for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
 	cfout.close();
 
