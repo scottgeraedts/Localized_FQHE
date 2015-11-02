@@ -25,7 +25,7 @@ public:
 	void print_H();
 
 	void ZeroHnn();
-	void make_Hnn();
+	void make_Hnn(int, int);
 	void disorderHnn();
 //	virtual void make_Hmm();
 	
@@ -58,7 +58,7 @@ protected:
 	SingleSolver single; //for other geometries, this would need to be promoted to a single-electron parent class
 //	virtual void add_disorder()=0;
 	
-	void init(int, int);
+	void init(int, int, int);
 	void make_states(int nLow, int nHigh);
 	void print_eigenstates();
 	int adjust_sign(int a,int b,bitset<NBITS> state);
@@ -93,15 +93,15 @@ ManySolver<ART>::ManySolver(int tNe,int tcharge,int tperiodic):Ne(tNe),charge(tc
 	}
 }
 template<class ART>
-void ManySolver<ART>::init(int nLow, int nHigh){
-	cache=0;
-	project=0;
+void ManySolver<ART>::init(int seed, int nLow, int nHigh){
+	cache=1;
+	project=1;
 	disorder=0;
+	single=SingleSolver(NPhi,0);
+	single.init(seed,0.1,nLow,nHigh);
 	make_cache();
 	make_states(nLow,nHigh);
-//	single=SingleSolver(NPhi,0);
-//	single.init(0,0.1,0,0);
-	make_Hnn();
+	make_Hnn(nLow, nHigh);
 }
 
 
@@ -112,25 +112,29 @@ void ManySolver<ART>::init(int nLow, int nHigh){
 template<class ART>
 void ManySolver<ART>::make_states(int nLow, int nHigh){
 	states=vector<bitset<NBITS> >(comb(NPhi,Ne),bitset<NBITS>());
-	int j=0;
+	int j=0,skip;
 	bitset<NBITS> s;
 	for(int i=0;i<intpow(2,NPhi);i++){
+		skip=0;
 		s=bitset<NBITS>(i);
 		if (s.count()==(unsigned) Ne && (has_charge==0 || get_charge(s)==charge) ){
-//			for(int k=0;k<nLow;k++) //these 4 lines are all that is needed for projection!
-//				if(!s.test(k)) continue;
-//			for(int k=NPhi-1;k>=NPhi-1-nHigh;k--)
-//				if(s.test(k)) continue;
-			states[j]=s;
-			j++;
+			for(int k=0;k<nLow;k++) //these 4 lines are all that is needed for projection!
+				if(!s.test(k)) skip=1;
+			for(int k=NPhi-1;k>NPhi-1-nHigh;k--)
+				if(s.test(k)) skip=1;
+			if(!skip){
+				states[j]=s;
+				j++;
+			}
 		}
 	}
 	states.resize(j);
 	nStates=j;		 
 //	cout<<"nStates: "<<nStates<<endl;
+//	for(int i=0;i<nStates;i++) cout<<states[i]<<endl;
 }
 template<class ART>
-void ManySolver<ART>::make_Hnn(){
+void ManySolver<ART>::make_Hnn(int nLow, int nHigh){
 	Hnn=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 	int j;
 	ART temp;
@@ -142,7 +146,7 @@ void ManySolver<ART>::make_Hnn(){
 //				cout<<"get disorder "<<a<<" "<<b<<"....";
 				temp=get_disorder(a,b);
 				for(int i=0;i<(signed)nStates;i++){
-					if (states[i].test(a) && (b==a || !states[i].test(b)) ){
+					if (states[i].test(a) && (b==a || (!states[i].test(b) && a>=nLow && a<NPhi-nHigh && b>=nLow && b<NPhi-nHigh) ) ){
 						j=lookup_flipped(states[i],a,b);
 						Hnn(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
 					}
@@ -164,7 +168,7 @@ void ManySolver<ART>::make_Hnn(){
 						if( (periodic && (a+b)%NPhi != (c+d)%NPhi) || (!periodic && a+b!=c+d) ) continue;
 	//				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
 					for(int i=0;i<nStates;i++){
-						if(states[i].test(a) && states[i].test(b) && (!states[i].test(c)  || c==a || c==b) && (!states[i].test(d) || a==d || b==d) )  {
+						if(states[i].test(a) && states[i].test(b) && ( (!states[i].test(c) && c<NPhi-nHigh) || c==a || c==b) && ( (!states[i].test(d) && d>=nLow) || a==d || b==d) && (a>=nLow || a==c ||a==d) &&(b<NPhi-nHigh || b==c ||b==d)  )  {
 							j=lookup_flipped(states[i],a,b,c,d);
 							Hnn(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}
@@ -372,10 +376,11 @@ template<class ART>
 int ManySolver<ART>::lookup_flipped(bitset<NBITS> state,int a,int b,int c,int d){
 //given a bitstring, finds its index in the bitstring array
 //this is currently done by a linear search, which is a terrible way to do it, and likely needs to be improved
-	bitset<NBITS> compare=state.flip(a);
-	compare=compare.flip(b);
-	compare=compare.flip(c);
-	compare=compare.flip(d);
+	bitset<NBITS> compare=state;
+	compare.flip(a);
+	compare.flip(b);
+	compare.flip(c);
+	compare.flip(d);
 	for (int i=0;i<nStates;i++){
 		if (compare==states[i]) return i;
 	}
@@ -387,8 +392,9 @@ template<class ART>
 int ManySolver<ART>::lookup_flipped(bitset<NBITS> state,int a,int b){
 //given a bitstring, finds its index in the bitstring array
 //this is currently done by a linear search, which is a terrible way to do it, and likely needs to be improved (the really sexy thing to do would be to combine all these functions)
-	bitset<NBITS> compare=state.flip(a);
-	compare=compare.flip(b);
+	bitset<NBITS> compare=state;
+	compare.flip(a);
+	compare.flip(b);
 	for (int i=0;i<nStates;i++){
 		if (compare==states[i]) return i;
 	}
