@@ -35,35 +35,34 @@ template <class ART>
 TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string name):ManySolver<ART>(tNe,tcharge,1){
 	//stuff unique to the torus
 	this->NPhi=_NPhi;
-	this->oldNPhi=this->NPhi;
 	Ly=sqrt(M_PI*this->NPhi*this->Ne/2.);//aspect ratio is Lx/Ly=Ne/4
 	Lx=(4/(1.*this->Ne))*Ly;
 
 
 	cout<<"run with Ne="<<this->Ne<<endl;
-	this->make_states();
-	this->ZeroHnn();
+	this->init(0,1);
 	double se=self_energy();
 	int stop=10;	
 	if(this->nStates<stop) stop=this->nStates-1;
 	stringstream filename;
 	filename.str("");
 	filename<<"gaps/"<<name<<"_"<<this->Ne<<"s";
-	ofstream cfout(filename.str().c_str(),ofstream::app);
+	ofstream cfout;
+	if(tcharge==-1) cfout.open(filename.str().c_str());
+	else cfout.open(filename.str().c_str(),ofstream::app);
 	
 //	this->es.compute(this->Hnn);
 //	Eigen::VectorXd sum=this->es.eigenvalues();
 //	sum=sum/(1.*this->Ne);
 //	sum=sum.array()+se;
-	if(this->nStates<stop) stop=this->nStates;
+//	for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
 
 //****A call to ARPACK++. The fastest of all methods
 	MatrixContainer<ART> mat(this->nStates,this->Hnn);
-    ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"SM",(int)0, 1e-10,1e6);//someday put this part into matprod?
+    ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
     dprob.FindEigenvalues();
 	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cfout<<tcharge<<" "<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<endl;
 
-//	for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
 	cfout.close();
 
 }
@@ -218,34 +217,34 @@ ART TorusSolver<ART>::four_body_haldane(int a, int b, int c, int d){
 	if(k<0) startk=1;
 	
 	for(int pm=startm; pm>-1;pm++){
-		qm=2.*M_PI*(m+pm*this->oldNPhi)/Lx;
+		qm=2.*M_PI*(m+pm*this->NPhi)/Lx;
 		expm=exp(-0.5*qm*qm);
 		if (expm<tol) break;
 		for(int pk=startk; pk>-1;pk++){
-			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
+			qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
 			expk=exp(-0.5*qk*qk);
 			if(expk<tol) break;
 			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);
 		}
 		for(int pk=startk-1; pk<1;pk--){
-			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
+			qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
 			expk=exp(-0.5*qk*qk);
 			if(expk<tol) break;
 			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);
 		}
 	}
 	for(int pm=startm-1; pm<1;pm--){
-		qm=2.*M_PI*(m+pm*this->oldNPhi)/Lx;
+		qm=2.*M_PI*(m+pm*this->NPhi)/Lx;
 		expm=exp(-0.5*qm*qm);
 		if (expm<tol) break;
 		for(int pk=startk; pk>-1;pk++){
-			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
+			qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
 			expk=exp(-0.5*qk*qk);
 			if(expk<tol) break;
 			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);
 		}
 		for(int pk=startk-1; pk<1;pk--){
-			qk=2.*M_PI*(k+pk*this->oldNPhi)/Lx;
+			qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
 			expk=exp(-0.5*qk*qk);
 			if(expk<tol) break;
 			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);

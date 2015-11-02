@@ -31,7 +31,6 @@ public:
 	
 protected:
 	int Ne,NPhi,nStates;
-	int lowDeltas,oldNPhi;
 	int charge,has_charge,disorder,periodic,cache,project;
 	int inversefilling,nDeltas;
 	vector<bitset<NBITS> > states;
@@ -46,7 +45,7 @@ protected:
 	virtual int EtoPhi(int Ne)=0; //mapping from number of electrons to number of fluxes	
 	void make_cache();
 	vector<ART> four_body_cache, two_body_cache;
-	void do_projection(int nLow, int nHigh);
+	void do_projection(int nLow=0, int nHigh=0);
 	ART four_body_project(int,int,int,int);
 	ART two_body_project(int,int);
 	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> basis;//used to test projection
@@ -59,8 +58,8 @@ protected:
 	SingleSolver single; //for other geometries, this would need to be promoted to a single-electron parent class
 //	virtual void add_disorder()=0;
 	
-	void init(int nd);
-	void make_states();
+	void init(int, int);
+	void make_states(int nLow, int nHigh);
 	void print_eigenstates();
 	int adjust_sign(int a,int b,bitset<NBITS> state);
 	int adjust_sign(int a,int b, int c, int d, bitset<NBITS> state);
@@ -94,45 +93,15 @@ ManySolver<ART>::ManySolver(int tNe,int tcharge,int tperiodic):Ne(tNe),charge(tc
 	}
 }
 template<class ART>
-void ManySolver<ART>::init(int ndeltas){
-	make_states();
-//	for(int i=0;i<nStates;i++) cout<<states[i]<<" ";
-//	cout<<endl;
-
-	if(cache) make_cache();
-	if(project) do_projection(ndeltas);
-	
-	ZeroHnn();	
+void ManySolver<ART>::init(int nLow, int nHigh){
+	cache=0;
+	project=0;
+	disorder=0;
+	make_cache();
+	make_states(nLow,nHigh);
+//	single=SingleSolver(NPhi,0);
+//	single.init(0,0.1,0,0);
 	make_Hnn();
-//	cout<<Hnn<<endl;
-
-//	clock_t t;
-//	t=clock();
-	es.compute(Hnn);
-//	t=clock()-t;
-//	cout<<"eigen: "<<((float)t)/CLOCKS_PER_SEC<<" seconds"<<endl;	
-
-//***a call to lapack, this can't handle complex numbers, changes Hnn, and is slower than Eigen. Probably should never be used
-//	double *matrix=new double[nStates*nStates];
-//	matrix=Hnn.data();
-//	double *w=new double[nStates];
-//	t=clock();
-//	LAPACKE_dsyev(LAPACK_COL_MAJOR,'V','U',nStates,matrix,nStates,w);
-//	t=clock()-t;
-//	cout<<"lapack: "<<((float)t)/CLOCKS_PER_SEC<<" seconds"<<endl;	
-//	cout<<w[0]/Ne<<endl;
-//	delete [] w;
-//	delete [] matrix;
-
-//****A call to ARPACK++. The fastest of all methods, but I don't know how to get it to work for complex numbers right now
-//	MatrixContainer<ART> mat(nStates,Hnn);
-//	t=clock();
-//    ARSymStdEig<ART, MatrixContainer<ART> >  dprob(mat.ncols(), 9, &mat, &MatrixContainer<ART>::MultMv,"LM");//someday put this part into matprod?
-//    dprob.FindEigenvalues();
-//	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i)<<endl;
-
-//	t=clock()-t;
-//	cout<<"arpack: "<<((float)t)/CLOCKS_PER_SEC<<" seconds"<<endl;	
 }
 
 
@@ -141,13 +110,17 @@ void ManySolver<ART>::init(int ndeltas){
 //this function starts at 0 and sees if its bitstring representation has the right number of electrons
 //it it does, it adds it to a vector called states
 template<class ART>
-void ManySolver<ART>::make_states(){
+void ManySolver<ART>::make_states(int nLow, int nHigh){
 	states=vector<bitset<NBITS> >(comb(NPhi,Ne),bitset<NBITS>());
 	int j=0;
 	bitset<NBITS> s;
 	for(int i=0;i<intpow(2,NPhi);i++){
 		s=bitset<NBITS>(i);
 		if (s.count()==(unsigned) Ne && (has_charge==0 || get_charge(s)==charge) ){
+//			for(int k=0;k<nLow;k++) //these 4 lines are all that is needed for projection!
+//				if(!s.test(k)) continue;
+//			for(int k=NPhi-1;k>=NPhi-1-nHigh;k--)
+//				if(s.test(k)) continue;
 			states[j]=s;
 			j++;
 		}
@@ -158,6 +131,7 @@ void ManySolver<ART>::make_states(){
 }
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
+	Hnn=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 	int j;
 	ART temp;
 	for(signed int a=0;a<NPhi;a++){
@@ -295,14 +269,14 @@ ART ManySolver<ART>::get_disorder(int a, int b){
 
 //maps indices from a four array to indices from a 1 array
 template<class ART>
-int ManySolver<ART>::four_array_map(int a,int b,int c, int d){ return a+b*oldNPhi+c*oldNPhi*oldNPhi+d*pow(oldNPhi,3); }
+int ManySolver<ART>::four_array_map(int a,int b,int c, int d){ return a+b*NPhi+c*NPhi*NPhi+d*pow(NPhi,3); }
 
 template<class ART>
 ART ManySolver<ART>::four_body_project(int a,int b,int c,int d){
 	ART out=0;
 	int id, sa,sb,sc,sd,signAB, signCD;
-	for(int ia=0;ia<oldNPhi;ia++){
-		for(int ib=0;ib<oldNPhi;ib++){
+	for(int ia=0;ia<NPhi;ia++){
+		for(int ib=0;ib<NPhi;ib++){
 			if (ib==ia) continue;
 
 			if(ib<ia){
@@ -313,24 +287,24 @@ ART ManySolver<ART>::four_body_project(int a,int b,int c,int d){
 			//pick bounds on c
 			int c_upper,c_lower;
 			if(periodic){
-				c_upper=oldNPhi; c_lower=0;
+				c_upper=NPhi; c_lower=0;
 			}else{
-				if (a+b>=oldNPhi){
-					c_upper=oldNPhi; c_lower=a+b-oldNPhi+1;
+				if (a+b>=NPhi){
+					c_upper=NPhi; c_lower=a+b-NPhi+1;
 				}else{
 					c_upper=a+b; c_lower=0;
 				}
 			}
 			for(int ic=c_lower;ic<c_upper;ic++){
-				if ((ia+ib-ic)<0) id=ia+ib-ic+oldNPhi;
-				else id=(ia+ib-ic)%oldNPhi;				
+				if ((ia+ib-ic)<0) id=ia+ib-ic+NPhi;
+				else id=(ia+ib-ic)%NPhi;				
 				if (id==ic) continue;
 				if(id>ic){
 					sc=id; sd=ic; signCD=-1;
 				}else{
 					sc=ic; sd=id; signCD=1;
 				}
-				out+=(double)(signAB*signCD)*single.evec(a+lowDeltas,ia)*single.evec(b+lowDeltas,ib)*conj(single.evec(c+lowDeltas,ic))*conj(single.evec(d+lowDeltas,id))*four_body_cache[four_array_map(sa,sb,sc,sd)];
+				out+=(double)(signAB*signCD)*single.evec(a,ia)*single.evec(b,ib)*conj(single.evec(c,ic))*conj(single.evec(d,id))*four_body_cache[four_array_map(sa,sb,sc,sd)];
 			}
 		}
 	}
@@ -339,10 +313,10 @@ ART ManySolver<ART>::four_body_project(int a,int b,int c,int d){
 template<class ART>
 ART ManySolver<ART>::two_body_project(int a,int b){
 	ART out=0;
-	for(int ia=0;ia<oldNPhi;ia++){
-		for(int ib=0;ib<oldNPhi;ib++){
+	for(int ia=0;ia<NPhi;ia++){
+		for(int ib=0;ib<NPhi;ib++){
 	//		cout<<ia<<" "<<ib<<" "<<single.evec(a+lowDeltas, ia)<<" "<<
-			out+=single.evec(a+lowDeltas,ia)*conj(single.evec(b+lowDeltas,ib))*two_body_cache[four_array_map(ia,ib,0,0)];
+			out+=single.evec(a,ia)*conj(single.evec(b,ib))*two_body_cache[four_array_map(ia,ib,0,0)];
 		}
 	}
 //	cout<<a<<" "<<b<<" **************"<<out<<endl;
@@ -356,9 +330,7 @@ void ManySolver<ART>::do_projection(int nLow,int nHigh){
 		exit(0);
 	}
 	project=1;
-	lowDeltas=nLow;
-	NPhi=oldNPhi-nLow-nHigh;
-	make_states();
+	make_states(nLow,nHigh);
 }
 
 //a Coulomb interaction

@@ -17,7 +17,7 @@ SingleSolver::SingleSolver(int _NPhi, int N_deltas, int _NROD, int _shift, doubl
 void SingleSolver::init(int seed,double V, int nLow, int nHigh){
 	Vstrength=V;
 	map <string, double> params;
-	params["Vstrength"]=100.;
+	params["Vstrength"]=1.;
 	params["nLow"]=nLow;
 	params["nHigh"]=nHigh;
 	Potential p_deltas("delta",qbounds,seed,Lx,Ly,params);
