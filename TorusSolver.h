@@ -43,7 +43,7 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 	HaldaneV[1]=1;
 	HaldaneV[3]=1/6.;
 	double se=self_energy();
-	int stop=20,NROD=1;	
+	int stop=10,NROD=10;	
 	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
 //	cout<<"run with Ne="<<this->Ne<<endl;
 	stringstream filename;
@@ -54,24 +54,24 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 	else cfout.open(filename.str().c_str(),ofstream::app);
 
 	for(int i=0;i<NROD;i++){
-		this->init(i,V,0,N,Lx,Ly);
+		this->init(i,V,N,N*4,Lx,Ly);
 		if(this->nStates<stop) stop=this->nStates;
 	
-		this->es.compute(this->Hnn);
-		sum=this->es.eigenvalues();
-		sum=sum/(1.*this->Ne);
-		sum=sum.array()+se;
-		for(int j=0;j<stop;j++) cfout<<tcharge<<" "<<sum(j)<<endl;
+//		this->es.compute(this->Hnn);
+//		sum=this->es.eigenvalues();
+//		sum=sum/(1.*this->Ne);
+//		sum=sum.array()+se;
+//		for(int j=0;j<stop;j++) cfout<<tcharge<<" "<<sum(j)<<endl;
 
 	//****A call to ARPACK++. The fastest of all methods
-//		MatrixContainer<ART> mat(this->nStates,this->Hnn);
-//		ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
-//		dprob.FindEigenvalues();
-//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=dprob.Eigenvalue(i).real()/(1.*this->Ne)+se;
+		MatrixContainer<ART> mat(this->nStates,this->Hnn);
+		ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
+		dprob.FindEigenvalues();
+		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=dprob.Eigenvalue(i).real()/(1.*this->Ne)+se;
 //		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<" ";
 //		cout<<endl;
 	}
-//	cfout<<sum/(1.*NROD)<<endl;
+	cfout<<sum/(1.*NROD)<<endl;
 
 //	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cfout<<tcharge<<" "<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<endl;
 

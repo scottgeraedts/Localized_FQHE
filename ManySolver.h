@@ -95,7 +95,7 @@ ManySolver<ART>::ManySolver(int tNe,int tcharge,int tperiodic):Ne(tNe),charge(tc
 template<class ART>
 void ManySolver<ART>::init(int seed, double V, int nLow, int nHigh, double Lx, double Ly){
 	cache=1;
-	project=0;
+	project=1;
 	disorder=0;
 	single=SingleSolver(NPhi,0,Lx,Ly);
 	single.init(seed,V,nLow,nHigh);
@@ -130,7 +130,7 @@ void ManySolver<ART>::make_states(int nLow, int nHigh){
 	}
 	states.resize(j);
 	nStates=j;		 
-	cout<<"nStates: "<<nStates<<endl;
+//	cout<<"nStates: "<<nStates<<endl;
 //	for(int i=0;i<nStates;i++) cout<<states[i]<<endl;
 }
 template<class ART>
