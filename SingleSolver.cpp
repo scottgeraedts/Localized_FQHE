@@ -1,6 +1,6 @@
 #include "SingleSolver.h"
 
-SingleSolver::SingleSolver(int _NPhi, int N_deltas, int _NROD, int _shift, double _Vstrength, double _Lx, double _Ly):NPhi(_NPhi),NROD(_NROD),shift(_shift),Vstrength(_Vstrength),Lx(_Lx), Ly(_Ly){
+SingleSolver::SingleSolver(int _NPhi, int N_deltas, double _Lx, double _Ly, int _NROD, int _shift, double _Vstrength):NPhi(_NPhi),NROD(_NROD),shift(_shift),Vstrength(_Vstrength),Lx(_Lx), Ly(_Ly){
 	if(Lx==0 || Ly==0){
 		Lx=sqrt(2*M_PI*NPhi);//square aspect ratio, might want to change this later
 		Ly=Lx;
@@ -29,6 +29,7 @@ void SingleSolver::init(int seed,double V, int nLow, int nHigh){
 	make_Hamiltonian(p_gauss);
 //	cout<<Hnn<<endl;
 //	cout<<proj.eigenvectors()<<endl;
+//	cout<<proj.eigenvalues()<<endl;
 }
 void SingleSolver::printEnergy(int nLow, int nHigh){
 	N_trunc=NPhi-nLow-nHigh;
@@ -54,11 +55,11 @@ void SingleSolver::visualizer(){
 	Potential p_delta("delta",qbounds,0,Lx,Ly,params);
 	p_delta.plot_potential();
 	make_Hamiltonian(p_delta);
-	cout<<Hnn<<endl;
+//	cout<<Hnn<<endl;
 	Eigen::SelfAdjointEigenSolver<MatrixXcd> es(Hnn);
 //	plot_density(es);
 	density_near_x(es,p_delta.xloc[0],p_delta.yloc[0]);
-	cout<<es.eigenvalues()<<endl;
+//	cout<<es.eigenvalues()<<endl;
 }
 void SingleSolver::run(){
 
@@ -218,14 +219,13 @@ void SingleSolver::make_Hamiltonian(Potential &pot,double theta_x,double theta_y
 							arg=M_PI*(1.*my*(n1+n2))/(1.*NPhi) +qy*theta_x/Lx+M_PI*my*p;
 							for(int msign=-1;msign<2;msign+=2){
 								temp=exp_qx * exp_qy * (pot.get_potential(mx,msign*my) * polar(1.0,msign*arg-p_arg));
-								temp/=(2.*M_PI*NPhi); //this is from the Fourier transforms, using convention v(x)=1/Vol sum_q v(q), v(q)=sum_x V(x)
 								tempH+=temp;
 								tempX+=qx*complex<double>(-temp.imag(),temp.real());
 								tempY+=msign*qy*complex<double>(-temp.imag(),temp.real());
 							}
 						}else{
 							temp=exp_qx*exp_qy*(pot.get_potential(mx,my)*polar(1.0,-p_arg));
-							temp/=(2.*M_PI*NPhi);
+							//temp/=(2.*M_PI*NPhi);
 							tempH+=temp;
 							tempX+=qx*complex<double>(-temp.imag(),temp.real());
 						}

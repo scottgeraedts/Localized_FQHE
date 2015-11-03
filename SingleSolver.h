@@ -35,7 +35,7 @@ private:
 
 class SingleSolver{
 public:
-	SingleSolver(int NPhi,int N_deltas, int NROD=1, int shift=0, double Vstrength=1. , double Lx=0, double Ly=0);
+	SingleSolver(int NPhi,int N_deltas, double Lx=0, double Ly=0, int NROD=1, int shift=0, double Vstrength=1. );
 	void visualizer();
 	void run();
 	complex<double> getH(int,int);

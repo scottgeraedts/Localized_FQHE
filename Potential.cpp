@@ -25,7 +25,7 @@ void Potential::make_potential_delta(map <string, double> &params){
 	int nLow=floor(params["nLow"]+0.1);
 	int nHigh=floor(params["nHigh"]+0.1);
 	double Vstrength=params["Vstrength"];
-	cout<<"ns: "<<nLow<<" "<<nHigh<<endl;
+//	cout<<"ns: "<<nLow<<" "<<nHigh<<endl;
 	for(int i=0;i<nLow;i++){
 		xloc.push_back(ran.rand(Lx)); yloc.push_back(ran.rand(Ly));sign.push_back(-1);//list of locations and signs of delta functions
 	}for(int i=0;i<nHigh;i++){
@@ -48,8 +48,8 @@ complex<double> Potential::get_potential(int mx,int my){
 		cout<<"error getting potential"<<endl;
 		exit(0);
 	}
-	if (my>=0) return V(mx+qbounds,my);
-	else return conj(V(-mx+qbounds,-my));
+	if (my>=0) return V(mx+qbounds,my)/sqrt(Lx*Ly);
+	else return conj(V(-mx+qbounds,-my))/sqrt(Lx*Ly);
 }
 int Potential::get_qbounds(){ return qbounds;}
 void Potential::plot_potential(){

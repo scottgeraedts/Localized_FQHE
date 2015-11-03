@@ -9,7 +9,7 @@ class TorusSolver:public ManySolver<ART>{
 
 public:
 
-	TorusSolver(int Ne,int charge, double V, int invfilling, string name);
+	TorusSolver(int Ne,int charge, double V, int invfilling, string name,int);
 	void make_Hnn();
 	double numerical_semidefinite_integral(double dx,double start,double tol,double z);
 	void add_disorder(int seed, double V,int,int);
@@ -18,6 +18,7 @@ public:
 private:
 
 	double Lx,Ly,V;
+	vector<double> HaldaneV;
 	int count;
 	double self_energy();
 	double Misra_onehalf(double t,double z);
@@ -32,16 +33,19 @@ private:
 };
 
 template <class ART>
-TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string name):ManySolver<ART>(tNe,tcharge,1){
+TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string name, int N):ManySolver<ART>(tNe,tcharge,1){
 	//stuff unique to the torus
 	this->NPhi=_NPhi;
 	Ly=sqrt(M_PI*this->NPhi*this->Ne/2.);//aspect ratio is Lx/Ly=Ne/4
 	Lx=(4/(1.*this->Ne))*Ly;
 
+	HaldaneV=vector<double>(4,0);
+	HaldaneV[1]=1;
+	HaldaneV[3]=1/6.;
 	double se=self_energy();
-	int stop=10,NROD=10;	
+	int stop=20,NROD=1;	
 	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
-	cout<<"run with Ne="<<this->Ne<<endl;
+//	cout<<"run with Ne="<<this->Ne<<endl;
 	stringstream filename;
 	filename.str("");
 	filename<<"gaps/"<<name<<"_"<<this->Ne<<"s";
@@ -50,22 +54,25 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 	else cfout.open(filename.str().c_str(),ofstream::app);
 
 	for(int i=0;i<NROD;i++){
-		this->init(i,0,1);
-		if(this->nStates<stop) stop=this->nStates-1;
+		this->init(i,V,0,N,Lx,Ly);
+		if(this->nStates<stop) stop=this->nStates;
 	
-	//	this->es.compute(this->Hnn);
-	//	sum=this->es.eigenvalues();
-	//	sum=sum/(1.*this->Ne);
-	//	sum=sum.array()+se;
-	//	for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
+		this->es.compute(this->Hnn);
+		sum=this->es.eigenvalues();
+		sum=sum/(1.*this->Ne);
+		sum=sum.array()+se;
+		for(int j=0;j<stop;j++) cfout<<tcharge<<" "<<sum(j)<<endl;
 
 	//****A call to ARPACK++. The fastest of all methods
-		MatrixContainer<ART> mat(this->nStates,this->Hnn);
-		ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
-		dprob.FindEigenvalues();
-		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=dprob.Eigenvalue(i).real()/(1.*this->Ne)+se;
+//		MatrixContainer<ART> mat(this->nStates,this->Hnn);
+//		ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
+//		dprob.FindEigenvalues();
+//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=dprob.Eigenvalue(i).real()/(1.*this->Ne)+se;
+//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<" ";
+//		cout<<endl;
 	}
-	cfout<<sum/(1.*NROD)<<endl;
+//	cfout<<sum/(1.*NROD)<<endl;
+
 //	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cfout<<tcharge<<" "<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<endl;
 
 	cfout.close();
@@ -216,46 +223,53 @@ template<class ART>
 ART TorusSolver<ART>::four_body_haldane(int a, int b, int c, int d){
 	int m=a-d, k=a-c; //these are the indices defined in Roger and Mike's paper they are the two variables left after COM and momentum conservation
 	//V=H((m+k)/2)H((m-k)/2), but need to take the PBC into account
-	double out=0,expm,expk,qm,qk,tol=1e-12;
+	//I'm using the definition in Zlatko's paper, which is off by Mikes definition by a mysterious factor of 1/(2*I)
+	double bigout=0,out=0,expm,expk,qm,qk,tol=1e-12;
 	int startm=0, startk=0;
 	if(m<0) startm=1;
 	if(k<0) startk=1;
 	
-	for(int pm=startm; pm>-1;pm++){
-		qm=2.*M_PI*(m+pm*this->NPhi)/Lx;
-		expm=exp(-0.5*qm*qm);
-		if (expm<tol) break;
-		for(int pk=startk; pk>-1;pk++){
-			qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
-			expk=exp(-0.5*qk*qk);
-			if(expk<tol) break;
-			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);
-		}
-		for(int pk=startk-1; pk<1;pk--){
-			qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
-			expk=exp(-0.5*qk*qk);
-			if(expk<tol) break;
-			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);
-		}
-	}
-	for(int pm=startm-1; pm<1;pm--){
-		qm=2.*M_PI*(m+pm*this->NPhi)/Lx;
-		expm=exp(-0.5*qm*qm);
-		if (expm<tol) break;
-		for(int pk=startk; pk>-1;pk++){
-			qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
-			expk=exp(-0.5*qk*qk);
-			if(expk<tol) break;
-			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);
-		}
-		for(int pk=startk-1; pk<1;pk--){
-			qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
-			expk=exp(-0.5*qk*qk);
-			if(expk<tol) break;
-			out+=expm*expk*Hermite(0.5*(qm+qk),1)*Hermite(0.5*(qk-qm),1);
+	for(int i=0;i<HaldaneV.size();i++){
+		if(HaldaneV[i]!=0){
+			for(int pm=startm; pm>-1;pm++){
+				qm=2.*M_PI*(m+pm*this->NPhi)/Lx;
+				expm=exp(-0.5*qm*qm);
+				if (expm<tol) break;
+				for(int pk=startk; pk>-1;pk++){
+					qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
+					expk=exp(-0.5*qk*qk);
+					if(expk<tol) break;
+					out+=expm*expk*Hermite(qm+qk,i)*Hermite(qk-qm,i);
+				}
+				for(int pk=startk-1; pk<1;pk--){
+					qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
+					expk=exp(-0.5*qk*qk);
+					if(expk<tol) break;
+					out+=expm*expk*Hermite(qm+qk,i)*Hermite(qk-qm,i);
+				}
+			}
+			for(int pm=startm-1; pm<1;pm--){
+				qm=2.*M_PI*(m+pm*this->NPhi)/Lx;
+				expm=exp(-0.5*qm*qm);
+				if (expm<tol) break;
+				for(int pk=startk; pk>-1;pk++){
+					qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
+					expk=exp(-0.5*qk*qk);
+					if(expk<tol) break;
+					out+=expm*expk*Hermite(qm+qk,i)*Hermite(qk-qm,i);
+				}
+				for(int pk=startk-1; pk<1;pk--){
+					qk=2.*M_PI*(k+pk*this->NPhi)/Lx;
+					expk=exp(-0.5*qk*qk);
+					if(expk<tol) break;
+					out+=expm*expk*Hermite(qm+qk,i)*Hermite(qk-qm,i);
+				}
+			}
+			bigout+=HaldaneV[i]*out;
+			out=0;
 		}
 	}		
-	return 2*out;//here swapping c&d gives the same thing up to a - sign that accounts for fermion parity, so just 
+	return 2*bigout;//here swapping c&d gives the same thing up to a - sign that accounts for fermion parity, so just 
 }
 template<class ART>
 ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ return four_body_haldane(a,b,c,d);}

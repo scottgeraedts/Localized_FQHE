@@ -58,7 +58,7 @@ protected:
 	SingleSolver single; //for other geometries, this would need to be promoted to a single-electron parent class
 //	virtual void add_disorder()=0;
 	
-	void init(int, int, int);
+	void init(int, double, int, int, double, double);
 	void make_states(int nLow, int nHigh);
 	void print_eigenstates();
 	int adjust_sign(int a,int b,bitset<NBITS> state);
@@ -93,12 +93,12 @@ ManySolver<ART>::ManySolver(int tNe,int tcharge,int tperiodic):Ne(tNe),charge(tc
 	}
 }
 template<class ART>
-void ManySolver<ART>::init(int seed, int nLow, int nHigh){
+void ManySolver<ART>::init(int seed, double V, int nLow, int nHigh, double Lx, double Ly){
 	cache=1;
-	project=1;
+	project=0;
 	disorder=0;
-	single=SingleSolver(NPhi,0);
-	single.init(seed,0.1,nLow,nHigh);
+	single=SingleSolver(NPhi,0,Lx,Ly);
+	single.init(seed,V,nLow,nHigh);
 	make_cache();
 	make_states(nLow,nHigh);
 	make_Hnn(nLow, nHigh);
@@ -130,7 +130,7 @@ void ManySolver<ART>::make_states(int nLow, int nHigh){
 	}
 	states.resize(j);
 	nStates=j;		 
-//	cout<<"nStates: "<<nStates<<endl;
+	cout<<"nStates: "<<nStates<<endl;
 //	for(int i=0;i<nStates;i++) cout<<states[i]<<endl;
 }
 template<class ART>
@@ -168,7 +168,11 @@ void ManySolver<ART>::make_Hnn(int nLow, int nHigh){
 						if( (periodic && (a+b)%NPhi != (c+d)%NPhi) || (!periodic && a+b!=c+d) ) continue;
 	//				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
 					for(int i=0;i<nStates;i++){
-						if(states[i].test(a) && states[i].test(b) && ( (!states[i].test(c) && c<NPhi-nHigh) || c==a || c==b) && ( (!states[i].test(d) && d>=nLow) || a==d || b==d) && (a>=nLow || a==c ||a==d) &&(b<NPhi-nHigh || b==c ||b==d)  )  {
+						if(states[i].test(a) && states[i].test(b) &&
+						 ( (!states[i].test(c) && c<NPhi-nHigh && c>=nLow) || c==a || c==b) && 
+						 ( (!states[i].test(d) && d>=nLow && d<NPhi-nHigh) || a==d || b==d) && 
+						 ( (a>=nLow && a<NPhi-nHigh) || a==c ||a==d) &&
+						 ( (b<NPhi-nHigh && b>=nLow) || b==c ||b==d)  )  {
 							j=lookup_flipped(states[i],a,b,c,d);
 							Hnn(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}
