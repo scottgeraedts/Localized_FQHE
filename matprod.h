@@ -10,6 +10,7 @@ this can do all kinds of things to a matrix, all it needs is a matvec that inher
 #include <Eigen/SparseCholesky>
 #include <Eigen/SparseLU>
 #include <Eigen/Core>
+#include "arscomp.h"
 
 using namespace std;
 
@@ -46,6 +47,7 @@ class MatrixWithProduct {
   void sparseLU();
   void sparseSolve();
 
+  void eigenvalues(int k);
   double calcVarEigen(Eigen::Matrix<ART, Eigen::Dynamic, 1> v);
     
   ~MatrixWithProduct();
@@ -207,6 +209,13 @@ double MatrixWithProduct<ART>::calcVarEigen(Eigen::Matrix<ART, Eigen::Dynamic, 1
 	return w.norm();
 }
 
+template <class ART> 
+void MatrixWithProduct<ART>::eigenvalues(int k){
+	ARCompStdEig<double, MatrixWithProduct<ART> >  dprob(ncols(), k, this, &MatrixWithProduct<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
+	dprob.FindEigenvalues();
+	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i)<<endl;
+	
+}	
 //destructor, delete the dense matrices
 template<class ART>
 MatrixWithProduct<ART>::~MatrixWithProduct(){

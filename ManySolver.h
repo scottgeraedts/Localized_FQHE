@@ -12,6 +12,9 @@
 #include "math.h"
 #include <ctime>
 #include "SingleSolver.h"
+#include "cblas.h"
+#include "arscomp.h"
+#include "matrixcontainer.h"
 
 //will use std::bitset library to store bits, which needs to know the number of bits at compile time
 //making this a bit too big is probably fine, some required values
@@ -25,12 +28,13 @@ public:
 	void print_H();
 
 	void ZeroHnn();
-	void make_Hnn(int, int);
+	void make_Hnn();
 	void disorderHnn();
 //	virtual void make_Hmm();
 	
 protected:
 	int Ne,NPhi,nStates;
+	int nHigh,nLow;
 	int charge,has_charge,disorder,periodic,cache,project;
 	int inversefilling,nDeltas;
 	vector<bitset<NBITS> > states;
@@ -44,7 +48,9 @@ protected:
 
 	virtual int EtoPhi(int Ne)=0; //mapping from number of electrons to number of fluxes	
 	void make_cache();
+	void second_cache();
 	vector<ART> four_body_cache, two_body_cache;
+	vector<ART> final_four_body_cache, final_two_body_cache;
 	void do_projection(int nLow=0, int nHigh=0);
 	ART four_body_project(int,int,int,int);
 	ART two_body_project(int,int);
@@ -59,13 +65,15 @@ protected:
 //	virtual void add_disorder()=0;
 	
 	void init(int, double, int, int, double, double);
-	void make_states(int nLow, int nHigh);
+	void MultMv(ART *v, ART *w);
+	void make_states();
 	void print_eigenstates();
 	int adjust_sign(int a,int b,bitset<NBITS> state);
 	int adjust_sign(int a,int b, int c, int d, bitset<NBITS> state);
 	int hasbit(int i,int a);
 	int lookup_flipped(bitset<NBITS> i,int a,int b,int c,int d);
 	int lookup_flipped(bitset<NBITS> i,int a,int b);
+	bool bitcompare(bitset<NBITS>, bitset<NBITS>);
 	int state_to_index(int state);
 	double V_Coulomb(double qx,double qy);
 
@@ -93,16 +101,107 @@ ManySolver<ART>::ManySolver(int tNe,int tcharge,int tperiodic):Ne(tNe),charge(tc
 	}
 }
 template<class ART>
-void ManySolver<ART>::init(int seed, double V, int nLow, int nHigh, double Lx, double Ly){
+void ManySolver<ART>::init(int seed, double V, int _nLow, int _nHigh, double Lx, double Ly){
 	cache=1;
 	project=1;
 	disorder=0;
+	nLow=_nLow; nHigh=_nHigh;
 	single=SingleSolver(NPhi,0,Lx,Ly);
+	
 	single.init(seed,V,nLow,nHigh);
 	make_cache();
-	make_states(nLow,nHigh);
-	make_Hnn(nLow, nHigh);
+	make_states();
+
+	clock_t t;
+//	t=clock();
+//	make_Hnn();
+//	MatrixContainer<ART> mat(this->nStates,this->Hnn);
+//	mat.eigenvalues(2);
+//	cout<<"old time: "<<(float)(clock()-t)/CLOCKS_PER_SEC<<endl;
+	
+//	t=clock();	
+//	second_cache();
+//	ARCompStdEig<double, ManySolver<ART> >  dprob(nStates, 2, this, &ManySolver<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
+//	dprob.FindEigenvalues();
+//	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<"test: "<<dprob.Eigenvalue(i)<<endl;
+//	cout<<"new time: "<<(float)(clock()-t)/CLOCKS_PER_SEC<<endl;
 }
+
+//TODO: truncation
+template<class ART>
+void ManySolver<ART>::MultMv(ART* v, ART* w){
+//an old matvec using the matrix Hnn
+//	double alpha=1., beta=0.;
+//	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
+	vector<int> filled;
+	vector<int> empty;
+	int j;
+	for(int i=0;i<nStates;i++) w[i]=0;
+	for(int i=0;i<nStates;i++){ // i is the input state
+		//find all filled and empty terms in input state
+		filled.clear(); empty.clear();
+		for(int m=0;m<NPhi;m++){
+			if (states[i].test(m)) filled.push_back(m);
+			else empty.push_back(m);
+		}		
+		//loop through filled and empty states to generate disorder-tunnelling term
+		if(disorder){
+			for(int f=0;f<filled.size();f++){
+				for(int e=0;e<empty.size();e++){
+					if(filled[f]<nLow || empty[e] > NPhi-nHigh-1) continue;
+					j=lookup_flipped(states[i],filled[f],empty[e]);
+					w[j]+=(double)adjust_sign(filled[f],empty[e],states[i]) * final_two_body_cache[four_array_map(filled[f],empty[e],0,0)]*v[i];
+				}
+			}
+		}
+		//loop through filled states to generate disorder diagonal term
+		if(disorder){
+			for(int f=0;f<filled.size();f++){
+				w[i]+=final_two_body_cache[four_array_map(filled[f],filled[f],0,0)]*v[i];
+			}
+		}
+		//loop through all pairs of filled states to generate diagonal term
+		for(int f1=0;f1<filled.size();f1++){
+			for(int f2=f1+1;f2<filled.size();f2++){
+				w[i]+=final_four_body_cache[four_array_map(filled[f1],filled[f2],filled[f2],filled[f1])]*v[i];
+			}
+		}
+		//loop through filled states^2 + empty states to generate four-body one-particle tunnelling terms
+		int a,b,c,d;
+		if(project){
+			for(int f1=0;f1<filled.size();f1++){
+				for(int f2=0;f2<filled.size();f2++){
+					if(f1==f2) continue;
+					for(int e=0;e<empty.size();e++){
+						if(filled[f1]<nLow || empty[e] > NPhi-nHigh-1) continue;
+						j=lookup_flipped(states[i],filled[f1],empty[e]);
+						if(filled[f2]<filled[f1]){ a=filled[f2]; b=filled[f1]; }
+						else{ a=filled[f1]; b=filled[f2]; }
+						if(filled[f2]<empty[e]){ d=filled[f2]; c=empty[e]; }
+						else{ d=empty[e]; c=filled[f2]; }
+				
+						w[j]+=(double)adjust_sign(a,b,c,d,states[i])*final_four_body_cache[four_array_map(a,b,c,d)]*v[i];
+					}
+				}
+			}
+		}
+		//loop through filled states^2 empty states^2 to generate four body tunnelling
+		for(int f1=0;f1<filled.size();f1++){
+			for(int f2=f1+1;f2<filled.size();f2++){
+				for(int e1=0;e1<empty.size();e1++){
+					for(int e2=e1+1;e2<empty.size();e2++){
+						if(filled[f1]<nLow || filled[f2]<nLow || empty[e1] > NPhi-nHigh-1 || empty[e2] > NPhi-nHigh-1) continue;
+						if(!project && (filled[f1]+filled[f2])%NPhi!=(empty[e1]+empty[e2])%NPhi) continue;
+						j=lookup_flipped(states[i],filled[f1],filled[f2],empty[e1],empty[e2]);
+						//cout<<i<<" "<<j<<" "<<filled[f1]<<" "<<filled[f2]<<" "<<empty[e1]<<" "<<empty[e2]<<" "<<final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]<<endl;
+						w[j]+=(double)adjust_sign(filled[f1],filled[f2],empty[e2],empty[e1],states[i])*final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]*v[i];
+					}
+				}
+			}
+		}
+	}
+		
+} //  MultMv.
 
 
 /// A state can be represented by a bit string, 
@@ -110,7 +209,7 @@ void ManySolver<ART>::init(int seed, double V, int nLow, int nHigh, double Lx, d
 //this function starts at 0 and sees if its bitstring representation has the right number of electrons
 //it it does, it adds it to a vector called states
 template<class ART>
-void ManySolver<ART>::make_states(int nLow, int nHigh){
+void ManySolver<ART>::make_states(){
 	states=vector<bitset<NBITS> >(comb(NPhi,Ne),bitset<NBITS>());
 	int j=0,skip;
 	bitset<NBITS> s;
@@ -130,11 +229,12 @@ void ManySolver<ART>::make_states(int nLow, int nHigh){
 	}
 	states.resize(j);
 	nStates=j;		 
-//	cout<<"nStates: "<<nStates<<endl;
-//	for(int i=0;i<nStates;i++) cout<<states[i]<<endl;
+	cout<<"nStates: "<<nStates<<endl;
+	for(int i=0;i<nStates;i++) cout<<states[i]<<endl;
+	cout<<" "<<lookup_flipped(states[0],0,1,5,6)<<endl;
 }
 template<class ART>
-void ManySolver<ART>::make_Hnn(int nLow, int nHigh){
+void ManySolver<ART>::make_Hnn(){
 	Hnn=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 	int j;
 	ART temp;
@@ -217,6 +317,44 @@ void ManySolver<ART>::make_cache(){
 				else d=(a+b-c)%NPhi;
 				if (d>=c) continue;
 				four_body_cache[four_array_map(a,b,c,d)]=four_body(a,b,c,d);
+			}	
+		}
+	}
+}
+
+template<class ART>
+void ManySolver<ART>::second_cache(){
+	ART temp;
+	final_four_body_cache.resize(pow(NPhi,4));
+	final_two_body_cache.resize(pow(NPhi,2));
+	
+	for(signed int a=0;a<NPhi;a++){
+		//terms from the disorder potential
+		if(disorder){
+			for(signed int b=0;b<NPhi;b++){		
+				final_two_body_cache[four_array_map(a,b,0,0)]=get_disorder(a,b);
+			}
+		}
+		for(signed int b=a+1;b<NPhi;b++){
+
+//			if(b>a) four_body_cache[four_array_map(a,b,b,a)]=two_body(a,b);		
+			//a+b=c+d, this sets some restrictions on which c and d need to be summed over
+			//on a sphere, there are already restrictions on the possible c, though on the torus more c's are possible (its difficult to a priori determine which ones)
+			int c_upper,c_lower;
+			if(periodic){
+				c_upper=NPhi; c_lower=0;
+			}else{
+				if (a+b>=NPhi){
+					c_upper=NPhi; c_lower=a+b-NPhi+1;
+				}else{
+					c_upper=a+b; c_lower=0;
+				}
+			}
+			for(int c=c_lower;c<c_upper;c++){
+				for(int d=0;d<c;d++){
+					if(!project && (a+b)%NPhi != (c+d)%NPhi ) continue;
+					final_four_body_cache[four_array_map(a,b,c,d)]=get_interaction(a,b,c,d);
+				}
 			}	
 		}
 	}
@@ -385,11 +523,18 @@ int ManySolver<ART>::lookup_flipped(bitset<NBITS> state,int a,int b,int c,int d)
 	compare.flip(b);
 	compare.flip(c);
 	compare.flip(d);
-	for (int i=0;i<nStates;i++){
-		if (compare==states[i]) return i;
+	vector< bitset<NBITS> >::iterator low;
+	low=lower_bound(states.begin(),states.end(),compare,&ManySolver<ART>::bitcompare);
+	if(low-states.begin()<nStates) return (low-states.begin());
+	else{
+		cout<<"error in lookup_flipped: "<<state<<" "<<compare<<" "<<a<<" "<<b<<" "<<c<<" "<<d<<endl;
+		exit(0);	
 	}
-	cout<<"error in lookup_flipped: "<<state<<" "<<compare<<" "<<a<<" "<<b<<" "<<c<<" "<<d<<endl;
-	exit(0);	
+}
+template<class ART>
+bool ManySolver<ART>::bitcompare(bitset<NBITS> x, bitset<NBITS> y){
+	if(x.to_ulong()<y.to_ulong()) return true;
+	else return false;
 }
 
 template<class ART>
