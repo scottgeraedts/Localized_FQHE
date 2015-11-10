@@ -18,7 +18,6 @@
 
 //will use std::bitset library to store bits, which needs to know the number of bits at compile time
 //making this a bit too big is probably fine, some required values
-#define NBITS 30
 using namespace std;
 
 template <class ART>
@@ -33,18 +32,18 @@ public:
 //	virtual void make_Hmm();
 	
 protected:
-	int Ne,NPhi,nStates;
+	int Ne,NPhi,nStates,NPhi2,NPhi3;
 	int nHigh,nLow;
-	int charge,has_charge,disorder,periodic,cache,project;
+	int charge,has_charge,disorder,periodic,cache,project,lookups;
 	int inversefilling,nDeltas;
-	vector<bitset<NBITS> > states;
+	vector<int > states;
 	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> Hnn;//ManySolver in Landau basis
 	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> Hmm;//ManySolver in localized basis
 	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic> > es;
 	
 	virtual ART two_body(int a,int b) =0;//could make virtual
 	virtual ART four_body(int a,int b,int c,int d) =0;//could make virtual
-	virtual int get_charge(bitset<NBITS> state)=0;//could make virtual
+	virtual int get_charge(int state)=0;//could make virtual
 
 	virtual int EtoPhi(int Ne)=0; //mapping from number of electrons to number of fluxes	
 	void make_cache();
@@ -67,13 +66,15 @@ protected:
 	void init(int, double, int, int, double, double);
 	void MultMv(ART *v, ART *w);
 	void make_states();
+	void make_lookups();
+	vector< vector<int> > lookup_table_four,lookup_table_two;
+	
 	void print_eigenstates();
-	int adjust_sign(int a,int b,bitset<NBITS> state);
-	int adjust_sign(int a,int b, int c, int d, bitset<NBITS> state);
+	int adjust_sign(int a,int b,int state);
+	int adjust_sign(int a,int b, int c, int d, int state);
 	int hasbit(int i,int a);
-	int lookup_flipped(bitset<NBITS> i,int a,int b,int c,int d);
-	int lookup_flipped(bitset<NBITS> i,int a,int b);
-	bool bitcompare(bitset<NBITS>, bitset<NBITS>);
+	int lookup_flipped(int i,int a,int b,int c,int d);
+	int lookup_flipped(int i,int a,int b);
 	int state_to_index(int state);
 	double V_Coulomb(double qx,double qy);
 
@@ -93,6 +94,7 @@ ManySolver<ART>::ManySolver(int tNe,int tcharge,int tperiodic):Ne(tNe),charge(tc
 	disorder=0;
 	cache=0;
 	project=0;
+	lookups=0;
 	if (charge==-1) has_charge=0;
 	else has_charge=1;
 	if(project && has_charge){
@@ -102,23 +104,27 @@ ManySolver<ART>::ManySolver(int tNe,int tcharge,int tperiodic):Ne(tNe),charge(tc
 }
 template<class ART>
 void ManySolver<ART>::init(int seed, double V, int _nLow, int _nHigh, double Lx, double Ly){
+	NPhi2=NPhi*NPhi;
+	NPhi3=NPhi*NPhi2;
 	cache=1;
 	project=1;
-	disorder=0;
+	disorder=1;
 	nLow=_nLow; nHigh=_nHigh;
 	single=SingleSolver(NPhi,0,Lx,Ly);
 	
 	single.init(seed,V,nLow,nHigh);
 	make_cache();
 	make_states();
+	make_Hnn();
+//	make_lookups();
 
-	clock_t t;
+//	clock_t t;
 //	t=clock();
 //	make_Hnn();
 //	MatrixContainer<ART> mat(this->nStates,this->Hnn);
 //	mat.eigenvalues(2);
 //	cout<<"old time: "<<(float)(clock()-t)/CLOCKS_PER_SEC<<endl;
-	
+//	
 //	t=clock();	
 //	second_cache();
 //	ARCompStdEig<double, ManySolver<ART> >  dprob(nStates, 2, this, &ManySolver<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
@@ -141,7 +147,7 @@ void ManySolver<ART>::MultMv(ART* v, ART* w){
 		//find all filled and empty terms in input state
 		filled.clear(); empty.clear();
 		for(int m=0;m<NPhi;m++){
-			if (states[i].test(m)) filled.push_back(m);
+			if (states[i] & 1<<m) filled.push_back(m);
 			else empty.push_back(m);
 		}		
 		//loop through filled and empty states to generate disorder-tunnelling term
@@ -149,7 +155,7 @@ void ManySolver<ART>::MultMv(ART* v, ART* w){
 			for(int f=0;f<filled.size();f++){
 				for(int e=0;e<empty.size();e++){
 					if(filled[f]<nLow || empty[e] > NPhi-nHigh-1) continue;
-					j=lookup_flipped(states[i],filled[f],empty[e]);
+					j=lookup_flipped(i,filled[f],empty[e]);
 					w[j]+=(double)adjust_sign(filled[f],empty[e],states[i]) * final_two_body_cache[four_array_map(filled[f],empty[e],0,0)]*v[i];
 				}
 			}
@@ -170,11 +176,12 @@ void ManySolver<ART>::MultMv(ART* v, ART* w){
 		int a,b,c,d;
 		if(project){
 			for(int f1=0;f1<filled.size();f1++){
+				if(filled[f1]<nLow) continue;
 				for(int f2=0;f2<filled.size();f2++){
 					if(f1==f2) continue;
 					for(int e=0;e<empty.size();e++){
-						if(filled[f1]<nLow || empty[e] > NPhi-nHigh-1) continue;
-						j=lookup_flipped(states[i],filled[f1],empty[e]);
+						if(empty[e] > NPhi-nHigh-1) continue;
+						j=lookup_flipped(i,filled[f1],empty[e]);
 						if(filled[f2]<filled[f1]){ a=filled[f2]; b=filled[f1]; }
 						else{ a=filled[f1]; b=filled[f2]; }
 						if(filled[f2]<empty[e]){ d=filled[f2]; c=empty[e]; }
@@ -187,12 +194,15 @@ void ManySolver<ART>::MultMv(ART* v, ART* w){
 		}
 		//loop through filled states^2 empty states^2 to generate four body tunnelling
 		for(int f1=0;f1<filled.size();f1++){
+			if(filled[f1]<nLow) continue;
 			for(int f2=f1+1;f2<filled.size();f2++){
+				if(filled[f2]<nLow) continue;
 				for(int e1=0;e1<empty.size();e1++){
+					if(empty[e1]>NPhi-nHigh-1) continue;
 					for(int e2=e1+1;e2<empty.size();e2++){
-						if(filled[f1]<nLow || filled[f2]<nLow || empty[e1] > NPhi-nHigh-1 || empty[e2] > NPhi-nHigh-1) continue;
+						if(empty[e2] > NPhi-nHigh-1) continue;
 						if(!project && (filled[f1]+filled[f2])%NPhi!=(empty[e1]+empty[e2])%NPhi) continue;
-						j=lookup_flipped(states[i],filled[f1],filled[f2],empty[e1],empty[e2]);
+						j=lookup_flipped(i,filled[f1],filled[f2],empty[e2],empty[e1]);
 						//cout<<i<<" "<<j<<" "<<filled[f1]<<" "<<filled[f2]<<" "<<empty[e1]<<" "<<empty[e2]<<" "<<final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]<<endl;
 						w[j]+=(double)adjust_sign(filled[f1],filled[f2],empty[e2],empty[e1],states[i])*final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]*v[i];
 					}
@@ -210,28 +220,30 @@ void ManySolver<ART>::MultMv(ART* v, ART* w){
 //it it does, it adds it to a vector called states
 template<class ART>
 void ManySolver<ART>::make_states(){
-	states=vector<bitset<NBITS> >(comb(NPhi,Ne),bitset<NBITS>());
-	int j=0,skip;
-	bitset<NBITS> s;
+	states.clear();
+	int j=0,skip,count;
 	for(int i=0;i<intpow(2,NPhi);i++){
 		skip=0;
-		s=bitset<NBITS>(i);
-		if (s.count()==(unsigned) Ne && (has_charge==0 || get_charge(s)==charge) ){
+		//count number of bits in the integer
+		count=0;
+		for(int n=0;n<NPhi;n++){
+			if(i& 1<<n) count++;
+		}
+		if (count==Ne && (has_charge==0 || get_charge(i)==charge) ){
 			for(int k=0;k<nLow;k++) //these 4 lines are all that is needed for projection!
-				if(!s.test(k)) skip=1;
+				if(! (i & 1<<k) ) skip=1;
 			for(int k=NPhi-1;k>NPhi-1-nHigh;k--)
-				if(s.test(k)) skip=1;
+				if(i & i<<k) skip=1;
 			if(!skip){
-				states[j]=s;
+				states.push_back(i);
 				j++;
 			}
 		}
 	}
-	states.resize(j);
 	nStates=j;		 
-	cout<<"nStates: "<<nStates<<endl;
-	for(int i=0;i<nStates;i++) cout<<states[i]<<endl;
-	cout<<" "<<lookup_flipped(states[0],0,1,5,6)<<endl;
+//	cout<<"nStates: "<<nStates<<endl;	
+//	for(int i=0;i<nStates;i++)
+//		cout<<states[i]<<endl;
 }
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
@@ -246,8 +258,8 @@ void ManySolver<ART>::make_Hnn(){
 //				cout<<"get disorder "<<a<<" "<<b<<"....";
 				temp=get_disorder(a,b);
 				for(int i=0;i<(signed)nStates;i++){
-					if (states[i].test(a) && (b==a || (!states[i].test(b) && a>=nLow && a<NPhi-nHigh && b>=nLow && b<NPhi-nHigh) ) ){
-						j=lookup_flipped(states[i],a,b);
+					if ((states[i] & 1<<a) && (b==a || (!( states[i] & 1<<b) && a>=nLow && a<NPhi-nHigh && b>=nLow && b<NPhi-nHigh) ) ){
+						j=lookup_flipped(i,a,b);
 						Hnn(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
 					}
 				}
@@ -268,12 +280,13 @@ void ManySolver<ART>::make_Hnn(){
 						if( (periodic && (a+b)%NPhi != (c+d)%NPhi) || (!periodic && a+b!=c+d) ) continue;
 	//				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
 					for(int i=0;i<nStates;i++){
-						if(states[i].test(a) && states[i].test(b) &&
-						 ( (!states[i].test(c) && c<NPhi-nHigh && c>=nLow) || c==a || c==b) && 
-						 ( (!states[i].test(d) && d>=nLow && d<NPhi-nHigh) || a==d || b==d) && 
+						if( (states[i] & 1<<a) && (states[i] & 1<<b) &&
+						 ( (!(states[i] & 1<<c) && c<NPhi-nHigh && c>=nLow) || c==a || c==b) && 
+						 ( (!(states[i] & 1<<d) && d>=nLow && d<NPhi-nHigh) || a==d || b==d) && 
 						 ( (a>=nLow && a<NPhi-nHigh) || a==c ||a==d) &&
 						 ( (b<NPhi-nHigh && b>=nLow) || b==c ||b==d)  )  {
-							j=lookup_flipped(states[i],a,b,c,d);
+				//	cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<i<<" "<<endl;
+							j=lookup_flipped(i,a,b,c,d);
 							Hnn(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}
 					}
@@ -360,31 +373,6 @@ void ManySolver<ART>::second_cache(){
 	}
 }
 
-//adds only the disorder terms to the Hamiltonian, no longer used
-template<class ART>
-void ManySolver<ART>::disorderHnn(){
-	int j;
-	if (!disorder){
-		cout<<"Disordered Hamiltonian requested, but no disorder has been set"<<endl;
-		exit(0);
-	}
-	for(signed int a=0;a<NPhi;a++){
-		//terms from the disorder potential that act on the same site
-		for(int i=0;i<(signed)nStates;i++){
-			if (states[i].test(a)) Hnn(i,i)+=get_disorder(a,a);
-		}
-		
-		//terms from the disorder potential that act on different sites
-		for(signed int b=a+1;b<NPhi;b++){			
-			for(int i=0;i<(signed)nStates;i++){
-				if (states[i].test(a) && !states[i].test(b)){
-					j=lookup_flipped(states[i],a,b);
-					Hnn(i,j)+=get_disorder(a,b);
-				}
-			}
-		}
-	}
-}
 template<class ART>
 void ManySolver<ART>::ZeroHnn(){ 
 	Hnn=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
@@ -415,7 +403,7 @@ ART ManySolver<ART>::get_disorder(int a, int b){
 
 //maps indices from a four array to indices from a 1 array
 template<class ART>
-int ManySolver<ART>::four_array_map(int a,int b,int c, int d){ return a+b*NPhi+c*NPhi*NPhi+d*pow(NPhi,3); }
+int ManySolver<ART>::four_array_map(int a,int b,int c, int d){ return a+b*NPhi+c*NPhi2+d*NPhi3; }
 
 template<class ART>
 ART ManySolver<ART>::four_body_project(int a,int b,int c,int d){
@@ -489,66 +477,93 @@ double ManySolver<ART>::V_Coulomb(double qx,double qy){
 //for four-body terms, we have something like c^dagger_a c_d. This gives a (-1) for every electron between a and d
 //this also works fine when you consider that we are performing two hops
 template<class ART>
-int ManySolver<ART>::adjust_sign(int a,int b,bitset<NBITS> state){
+int ManySolver<ART>::adjust_sign(int a,int b,int state){
 	int sign=1;
 	int start=a, end=b;
 	if (a>b){ start=b; end=a;}
 	for(int i=start+1;i<end;i++)
-		if(state.test(i)) sign*=-1;
+		if(state & 1<<i) sign*=-1;
 	return sign;	
 }
 //puts in minus signs for correct Fermi statistics
 //for four-body terms, we have something like c^dagger_a c_d. This gives a (-1) for every electron between a and d
 //this also works fine when you consider that we are performing two hops
 template<class ART>
-int ManySolver<ART>::adjust_sign(int a,int b,int c,int d,bitset<NBITS> state){
+int ManySolver<ART>::adjust_sign(int a,int b,int c,int d,int state){
 	int sign=1;
 	int start=a, end=b;
 	if (a>b){ start=b; end=a;}
 	for(int i=start+1;i<end;i++)
-		if(state.test(i) && i!=c && i!=d) sign*=-1;
+		if(state & 1<<i && i!=c && i!=d) sign*=-1;
 	start=c, end=d;
 	if (c>d){ start=d; end=c;}
 	for(int i=start+1;i<end;i++)
-		if(state.test(i) && i!=a && i!=b) sign*=-1;
+		if(state & 1<<i && i!=a && i!=b) sign*=-1;
 	return sign;	
 }
 
 template<class ART>
-int ManySolver<ART>::lookup_flipped(bitset<NBITS> state,int a,int b,int c,int d){
-//given a bitstring, finds its index in the bitstring array
-//this is currently done by a linear search, which is a terrible way to do it, and likely needs to be improved
-	bitset<NBITS> compare=state;
-	compare.flip(a);
-	compare.flip(b);
-	compare.flip(c);
-	compare.flip(d);
-	vector< bitset<NBITS> >::iterator low;
-	low=lower_bound(states.begin(),states.end(),compare,&ManySolver<ART>::bitcompare);
-	if(low-states.begin()<nStates) return (low-states.begin());
-	else{
-		cout<<"error in lookup_flipped: "<<state<<" "<<compare<<" "<<a<<" "<<b<<" "<<c<<" "<<d<<endl;
-		exit(0);	
+void ManySolver<ART>::make_lookups(){
+	vector<int> temp(NPhi3*NPhi,0);
+	lookup_table_four=vector<vector<int> >(nStates,temp);
+	vector<int> temp2(NPhi2,0);
+	lookup_table_two=vector<vector<int> >(nStates,temp);
+	for(int i=0;i<nStates;i++){
+		for(int a=nLow;a<NPhi-nHigh;a++){
+			for(int b=nLow;b<NPhi-nHigh;b++){
+				lookup_table_two[i][four_array_map(a,b,0,0)]=lookup_flipped(i,a,b);
+			}
+			for(int b=a+1;b<NPhi-nHigh;b++){
+				for(int c=nLow;c<NPhi-nHigh;c++){
+					for(int d=nLow;d<c;d++){
+						if(!project && (a+b)%NPhi != (c+d) % NPhi) continue;
+						lookup_table_four[i][four_array_map(a,b,c,d)]=lookup_flipped(i,a,b,c,d);
+					}
+				}
+			}
+		}
 	}
+	lookups=1;
 }
+	
 template<class ART>
-bool ManySolver<ART>::bitcompare(bitset<NBITS> x, bitset<NBITS> y){
-	if(x.to_ulong()<y.to_ulong()) return true;
-	else return false;
+int ManySolver<ART>::lookup_flipped(int i,int a,int b,int c,int d){
+//given a bitstring, finds its index in the bitstring array
+	if(lookups) return lookup_table_four[i][four_array_map(a,b,c,d)];
+	else{
+		int compare=states[i];
+		compare=compare ^ 1<<a;
+		compare=compare ^ 1<<b;
+		compare=compare ^ 1<<c;
+		compare=compare ^ 1<<d;
+		vector<int>::iterator low;
+		low=lower_bound(states.begin(),states.end(),compare);
+		if(low!=states.end()) return (low-states.begin());
+		else{
+			cout<<"error in lookup_flipped: "<<(bitset<30>)states[i]<<" "<<(bitset<30>)compare<<" "<<a<<" "<<b<<" "<<c<<" "<<d<<endl;
+			exit(0);	
+			return 0;
+		}
+	}
 }
 
 template<class ART>
-int ManySolver<ART>::lookup_flipped(bitset<NBITS> state,int a,int b){
+int ManySolver<ART>::lookup_flipped(int i,int a,int b){
 //given a bitstring, finds its index in the bitstring array
-//this is currently done by a linear search, which is a terrible way to do it, and likely needs to be improved (the really sexy thing to do would be to combine all these functions)
-	bitset<NBITS> compare=state;
-	compare.flip(a);
-	compare.flip(b);
-	for (int i=0;i<nStates;i++){
-		if (compare==states[i]) return i;
+	if(lookups) return lookup_table_two[i][four_array_map(a,b,0,0)];
+	else{
+		int compare=states[i];
+		compare=compare ^ 1<<a;
+		compare=compare ^ 1<<b;
+		vector<int>::iterator low;
+		low=lower_bound(states.begin(),states.end(),compare);
+		if(low!=states.end()) return (low-states.begin());
+		else{
+			cout<<"error in lookup_flipped: "<<(bitset<30>)states[i]<<" "<<(bitset<30>)compare<<" "<<a<<" "<<b<<endl;
+			exit(0);
+			return 0;	
+		}
 	}
-	cout<<"error in lookup_flipped: "<<state<<" "<<compare<<" "<<a<<" "<<b<<endl;
-	exit(0);	
 }
 
 template<class ART>

@@ -27,7 +27,7 @@ private:
 	ART four_body_coulomb(int a,int b, int c, int d);
 	ART four_body_haldane(int a,int b, int c, int d);
 	double Hermite(double x,int n);
-	int get_charge(bitset<NBITS> state);//could make virtual
+	int get_charge(int state);//could make virtual
 
 };
 
@@ -40,21 +40,21 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 
 	HaldaneV=vector<double>(4,0);
 	HaldaneV[1]=1;
-	HaldaneV[3]=1/6.;
+	HaldaneV[3]=0;
 	double se=self_energy();
-	int stop=10,NROD=1;	
+	int stop=10,NROD=10;	
 	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
 //	cout<<"run with Ne="<<this->Ne<<endl;
 	stringstream filename;
 	filename.str("");
-	filename<<"gaps/"<<name<<"_"<<this->Ne<<"s";
+	filename<<"gaps2/"<<name<<"_"<<this->Ne;
 	ofstream cfout;
 	if(tcharge==-1) cfout.open(filename.str().c_str());
 	else cfout.open(filename.str().c_str(),ofstream::app);
 
 	for(int i=0;i<NROD;i++){
-		this->init(i,V,N,N,Lx,Ly);
-		if(this->nStates<stop) stop=this->nStates;
+		this->init(i,V,0,N,Lx,Ly);
+		if(this->nStates<=stop) stop=this->nStates-1;
 	
 //		this->es.compute(this->Hnn);
 //		sum=this->es.eigenvalues();
@@ -62,16 +62,17 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 //		sum=sum.array()+se;
 //		for(int j=0;j<stop;j++) cfout<<tcharge<<" "<<sum(j)<<endl;
 
-	//****A call to ARPACK++. The fastest of all methods
-//		MatrixContainer<ART> mat(this->nStates,this->Hnn);
-//		mat.eigenvalues(2);
-//		ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
-//		dprob.FindEigenvalues();
-//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=dprob.Eigenvalue(i).real()/(1.*this->Ne)+se;
+	//****A call to ARPACK++. The fastest of all methods		
+		MatrixContainer<ART> mat(this->nStates,this->Hnn);
+		ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
+		dprob.FindEigenvalues();
+		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=dprob.Eigenvalue(i).real()/(1.*this->Ne)+se;
 //		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<" ";
 //		cout<<endl;
 	}
-	cfout<<sum/(1.*NROD)<<endl;
+	sum/=(1.*NROD);
+	cout<<N<<" "<<sum(stop-1-3)-sum(stop-1-2)<<" "<<sum(stop-1-2)-sum(stop-1)<<endl;
+	cfout<<sum<<endl;
 
 //	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cfout<<tcharge<<" "<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<endl;
 
@@ -80,10 +81,10 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 }
 ///functions which are definitely unique to the torus
 template <class ART>
-int TorusSolver<ART>::get_charge(bitset<NBITS> s){
+int TorusSolver<ART>::get_charge(int s){
 	int out=0;
-	for(unsigned int i=0;i<NBITS;i++){
-		if (s.test(i)) out+=i;
+	for(unsigned int i=0;i<this->NPhi;i++){
+		if (s & 1<<i) out+=i;
 	}
 	return out%this->NPhi;
 }
@@ -272,7 +273,7 @@ ART TorusSolver<ART>::four_body_haldane(int a, int b, int c, int d){
 	return 2*bigout;//here swapping c&d gives the same thing up to a - sign that accounts for fermion parity, so just 
 }
 template<class ART>
-ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ return four_body_coulomb(a,b,c,d);}
+ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ return four_body_haldane(a,b,c,d);}
 //Hermite polynomials (using the 'probabalist' definition, see the wikipedia entry)
 template<class ART>
 double TorusSolver<ART>::Hermite(double x, int n){
