@@ -12,7 +12,6 @@ public:
 	void make_Hnn();
 	double numerical_semidefinite_integral(double dx,double start,double tol,double z);
 	void add_disorder(int seed, double V,int,int);
-	int EtoPhi(int Ne);
 
 private:
 
@@ -42,7 +41,7 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 	HaldaneV[1]=1;
 	HaldaneV[3]=0;
 	double se=self_energy();
-	int stop=10,NROD=10;	
+	int stop=10,NROD=1;	
 	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
 //	cout<<"run with Ne="<<this->Ne<<endl;
 	stringstream filename;
@@ -63,15 +62,15 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 //		for(int j=0;j<stop;j++) cfout<<tcharge<<" "<<sum(j)<<endl;
 
 	//****A call to ARPACK++. The fastest of all methods		
-		MatrixContainer<ART> mat(this->nStates,this->Hnn);
-		ARCompStdEig<double, MatrixContainer<ART> >  dprob(mat.ncols(), stop, &mat, &MatrixContainer<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
+//		MatrixContainer<ART> mat(this->nStates,this->Hnn);
+		ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::Hnn_matvec,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
 		dprob.FindEigenvalues();
 		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=dprob.Eigenvalue(i).real()/(1.*this->Ne)+se;
 //		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<" ";
 //		cout<<endl;
 	}
 	sum/=(1.*NROD);
-	cout<<N<<" "<<sum(stop-1-3)-sum(stop-1-2)<<" "<<sum(stop-1-2)-sum(stop-1)<<endl;
+//	cout<<N<<" "<<sum(stop-1-3)-sum(stop-1-2)<<" "<<sum(stop-1-2)-sum(stop-1)<<endl;
 	cfout<<sum<<endl;
 
 //	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cfout<<tcharge<<" "<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<endl;
@@ -273,7 +272,7 @@ ART TorusSolver<ART>::four_body_haldane(int a, int b, int c, int d){
 	return 2*bigout;//here swapping c&d gives the same thing up to a - sign that accounts for fermion parity, so just 
 }
 template<class ART>
-ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ return four_body_haldane(a,b,c,d);}
+ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ return four_body_coulomb(a,b,c,d);}
 //Hermite polynomials (using the 'probabalist' definition, see the wikipedia entry)
 template<class ART>
 double TorusSolver<ART>::Hermite(double x, int n){
@@ -287,9 +286,6 @@ double TorusSolver<ART>::Hermite(double x, int n){
 		exit(0);
 	}
 }
-
-template<class ART>
-int TorusSolver<ART>::EtoPhi(int Ne){ return this->inversefilling*Ne; }
 
 //loads single particle class that provides disorder potentials
 template<class ART>

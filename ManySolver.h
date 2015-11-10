@@ -14,7 +14,6 @@
 #include "SingleSolver.h"
 #include "cblas.h"
 #include "arscomp.h"
-#include "matrixcontainer.h"
 
 //will use std::bitset library to store bits, which needs to know the number of bits at compile time
 //making this a bit too big is probably fine, some required values
@@ -45,36 +44,34 @@ protected:
 	virtual ART four_body(int a,int b,int c,int d) =0;//could make virtual
 	virtual int get_charge(int state)=0;//could make virtual
 
-	virtual int EtoPhi(int Ne)=0; //mapping from number of electrons to number of fluxes	
+	void init(int, double, int, int, double, double);
+	void make_states();
 	void make_cache();
 	void second_cache();
+
 	vector<ART> four_body_cache, two_body_cache;
 	vector<ART> final_four_body_cache, final_two_body_cache;
-	void do_projection(int nLow=0, int nHigh=0);
 	ART four_body_project(int,int,int,int);
 	ART two_body_project(int,int);
-	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> basis;//used to test projection
 	ART get_interaction(int,int,int,int);
-	ART get_interaction(int,int);
 	ART get_disorder(int,int);
 	int four_array_map(int,int,int,int);
 	
 	//stuff to deal with disorder
 	SingleSolver single; //for other geometries, this would need to be promoted to a single-electron parent class
-//	virtual void add_disorder()=0;
 	
-	void init(int, double, int, int, double, double);
 	void MultMv(ART *v, ART *w);
-	void make_states();
-	void make_lookups();
+	void Hnn_matvec(ART *v, ART *w);
+
 	vector< vector<int> > lookup_table_four,lookup_table_two;
+	int lookup_flipped(int i,int a,int b,int c,int d);
+	int lookup_flipped(int i,int a,int b);
+	void make_lookups();
 	
 	void print_eigenstates();
 	int adjust_sign(int a,int b,int state);
 	int adjust_sign(int a,int b, int c, int d, int state);
 	int hasbit(int i,int a);
-	int lookup_flipped(int i,int a,int b,int c,int d);
-	int lookup_flipped(int i,int a,int b);
 	int state_to_index(int state);
 	double V_Coulomb(double qx,double qy);
 
@@ -133,87 +130,7 @@ void ManySolver<ART>::init(int seed, double V, int _nLow, int _nHigh, double Lx,
 //	cout<<"new time: "<<(float)(clock()-t)/CLOCKS_PER_SEC<<endl;
 }
 
-//TODO: truncation
-template<class ART>
-void ManySolver<ART>::MultMv(ART* v, ART* w){
-//an old matvec using the matrix Hnn
-//	double alpha=1., beta=0.;
-//	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
-	vector<int> filled;
-	vector<int> empty;
-	int j;
-	for(int i=0;i<nStates;i++) w[i]=0;
-	for(int i=0;i<nStates;i++){ // i is the input state
-		//find all filled and empty terms in input state
-		filled.clear(); empty.clear();
-		for(int m=0;m<NPhi;m++){
-			if (states[i] & 1<<m) filled.push_back(m);
-			else empty.push_back(m);
-		}		
-		//loop through filled and empty states to generate disorder-tunnelling term
-		if(disorder){
-			for(int f=0;f<filled.size();f++){
-				for(int e=0;e<empty.size();e++){
-					if(filled[f]<nLow || empty[e] > NPhi-nHigh-1) continue;
-					j=lookup_flipped(i,filled[f],empty[e]);
-					w[j]+=(double)adjust_sign(filled[f],empty[e],states[i]) * final_two_body_cache[four_array_map(filled[f],empty[e],0,0)]*v[i];
-				}
-			}
-		}
-		//loop through filled states to generate disorder diagonal term
-		if(disorder){
-			for(int f=0;f<filled.size();f++){
-				w[i]+=final_two_body_cache[four_array_map(filled[f],filled[f],0,0)]*v[i];
-			}
-		}
-		//loop through all pairs of filled states to generate diagonal term
-		for(int f1=0;f1<filled.size();f1++){
-			for(int f2=f1+1;f2<filled.size();f2++){
-				w[i]+=final_four_body_cache[four_array_map(filled[f1],filled[f2],filled[f2],filled[f1])]*v[i];
-			}
-		}
-		//loop through filled states^2 + empty states to generate four-body one-particle tunnelling terms
-		int a,b,c,d;
-		if(project){
-			for(int f1=0;f1<filled.size();f1++){
-				if(filled[f1]<nLow) continue;
-				for(int f2=0;f2<filled.size();f2++){
-					if(f1==f2) continue;
-					for(int e=0;e<empty.size();e++){
-						if(empty[e] > NPhi-nHigh-1) continue;
-						j=lookup_flipped(i,filled[f1],empty[e]);
-						if(filled[f2]<filled[f1]){ a=filled[f2]; b=filled[f1]; }
-						else{ a=filled[f1]; b=filled[f2]; }
-						if(filled[f2]<empty[e]){ d=filled[f2]; c=empty[e]; }
-						else{ d=empty[e]; c=filled[f2]; }
-				
-						w[j]+=(double)adjust_sign(a,b,c,d,states[i])*final_four_body_cache[four_array_map(a,b,c,d)]*v[i];
-					}
-				}
-			}
-		}
-		//loop through filled states^2 empty states^2 to generate four body tunnelling
-		for(int f1=0;f1<filled.size();f1++){
-			if(filled[f1]<nLow) continue;
-			for(int f2=f1+1;f2<filled.size();f2++){
-				if(filled[f2]<nLow) continue;
-				for(int e1=0;e1<empty.size();e1++){
-					if(empty[e1]>NPhi-nHigh-1) continue;
-					for(int e2=e1+1;e2<empty.size();e2++){
-						if(empty[e2] > NPhi-nHigh-1) continue;
-						if(!project && (filled[f1]+filled[f2])%NPhi!=(empty[e1]+empty[e2])%NPhi) continue;
-						j=lookup_flipped(i,filled[f1],filled[f2],empty[e2],empty[e1]);
-						//cout<<i<<" "<<j<<" "<<filled[f1]<<" "<<filled[f2]<<" "<<empty[e1]<<" "<<empty[e2]<<" "<<final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]<<endl;
-						w[j]+=(double)adjust_sign(filled[f1],filled[f2],empty[e2],empty[e1],states[i])*final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]*v[i];
-					}
-				}
-			}
-		}
-	}
-		
-} //  MultMv.
-
-
+////*********************SETUP FUNCTIONS
 /// A state can be represented by a bit string, 
 //ex. 7=11100000 has electrons in positions 0,1,2, 13=1011 has electron in 0,2,3
 //this function starts at 0 and sees if its bitstring representation has the right number of electrons
@@ -373,19 +290,7 @@ void ManySolver<ART>::second_cache(){
 	}
 }
 
-template<class ART>
-void ManySolver<ART>::ZeroHnn(){ 
-	Hnn=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
-	make_Hnn(); 
-}
-
-//returns the interaction terms from a Hamiltonian
-//template<class ART>
-//ART ManySolver<ART>::get_interaction(int a,int b){
-//	if(!cache) return two_body(a,b);
-//	else if(!project) return four_body_cache[four_array_map(a,b,b,a)];
-//	else return four_body_project(a,b,a,b);
-//}
+////*****FUNCTIONS WHICH HELP WITH INTERACTION TERMS
 template<class ART>
 ART ManySolver<ART>::get_interaction(int a,int b,int c, int d){
 	if(!cache) return four_body(a,b,c,d);
@@ -455,16 +360,6 @@ ART ManySolver<ART>::two_body_project(int a,int b){
 	}
 //	cout<<a<<" "<<b<<" **************"<<out<<endl;
 	return out;
-}
-
-template<class ART>
-void ManySolver<ART>::do_projection(int nLow,int nHigh){
-	if(cache!=1){
-		cout<<"you can't project if you haven't cached the unprojected potentials!"<<endl;
-		exit(0);
-	}
-	project=1;
-	make_states(nLow,nHigh);
 }
 
 //a Coulomb interaction
@@ -566,6 +461,91 @@ int ManySolver<ART>::lookup_flipped(int i,int a,int b){
 	}
 }
 
+////******MATVECS*****////
+template<class ART>
+void ManySolver<ART>::MultMv(ART* v, ART* w){
+//an old matvec using the matrix Hnn
+//	double alpha=1., beta=0.;
+//	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
+	vector<int> filled;
+	vector<int> empty;
+	int j;
+	for(int i=0;i<nStates;i++) w[i]=0;
+	for(int i=0;i<nStates;i++){ // i is the input state
+		//find all filled and empty terms in input state
+		filled.clear(); empty.clear();
+		for(int m=0;m<NPhi;m++){
+			if (states[i] & 1<<m) filled.push_back(m);
+			else empty.push_back(m);
+		}		
+		//loop through filled and empty states to generate disorder-tunnelling term
+		if(disorder){
+			for(int f=0;f<filled.size();f++){
+				for(int e=0;e<empty.size();e++){
+					if(filled[f]<nLow || empty[e] > NPhi-nHigh-1) continue;
+					j=lookup_flipped(i,filled[f],empty[e]);
+					w[j]+=(double)adjust_sign(filled[f],empty[e],states[i]) * final_two_body_cache[four_array_map(filled[f],empty[e],0,0)]*v[i];
+				}
+			}
+		}
+		//loop through filled states to generate disorder diagonal term
+		if(disorder){
+			for(int f=0;f<filled.size();f++){
+				w[i]+=final_two_body_cache[four_array_map(filled[f],filled[f],0,0)]*v[i];
+			}
+		}
+		//loop through all pairs of filled states to generate diagonal term
+		for(int f1=0;f1<filled.size();f1++){
+			for(int f2=f1+1;f2<filled.size();f2++){
+				w[i]+=final_four_body_cache[four_array_map(filled[f1],filled[f2],filled[f2],filled[f1])]*v[i];
+			}
+		}
+		//loop through filled states^2 + empty states to generate four-body one-particle tunnelling terms
+		int a,b,c,d;
+		if(project){
+			for(int f1=0;f1<filled.size();f1++){
+				if(filled[f1]<nLow) continue;
+				for(int f2=0;f2<filled.size();f2++){
+					if(f1==f2) continue;
+					for(int e=0;e<empty.size();e++){
+						if(empty[e] > NPhi-nHigh-1) continue;
+						j=lookup_flipped(i,filled[f1],empty[e]);
+						if(filled[f2]<filled[f1]){ a=filled[f2]; b=filled[f1]; }
+						else{ a=filled[f1]; b=filled[f2]; }
+						if(filled[f2]<empty[e]){ d=filled[f2]; c=empty[e]; }
+						else{ d=empty[e]; c=filled[f2]; }
+				
+						w[j]+=(double)adjust_sign(a,b,c,d,states[i])*final_four_body_cache[four_array_map(a,b,c,d)]*v[i];
+					}
+				}
+			}
+		}
+		//loop through filled states^2 empty states^2 to generate four body tunnelling
+		for(int f1=0;f1<filled.size();f1++){
+			if(filled[f1]<nLow) continue;
+			for(int f2=f1+1;f2<filled.size();f2++){
+				if(filled[f2]<nLow) continue;
+				for(int e1=0;e1<empty.size();e1++){
+					if(empty[e1]>NPhi-nHigh-1) continue;
+					for(int e2=e1+1;e2<empty.size();e2++){
+						if(empty[e2] > NPhi-nHigh-1) continue;
+						if(!project && (filled[f1]+filled[f2])%NPhi!=(empty[e1]+empty[e2])%NPhi) continue;
+						j=lookup_flipped(i,filled[f1],filled[f2],empty[e2],empty[e1]);
+						//cout<<i<<" "<<j<<" "<<filled[f1]<<" "<<filled[f2]<<" "<<empty[e1]<<" "<<empty[e2]<<" "<<final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]<<endl;
+						w[j]+=(double)adjust_sign(filled[f1],filled[f2],empty[e2],empty[e1],states[i])*final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]*v[i];
+					}
+				}
+			}
+		}
+	}
+		
+} //  MultMv.
+
+template<class ART>
+void ManySolver<ART>::Hnn_matvec(ART * v, ART * w){
+	double alpha=1., beta=0.;
+	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
+}
 template<class ART>
 void ManySolver<ART>::print_H(){
 	ofstream Hout;
