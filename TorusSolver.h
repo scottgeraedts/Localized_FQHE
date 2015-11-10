@@ -63,7 +63,7 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 
 	//****A call to ARPACK++. The fastest of all methods		
 //		MatrixContainer<ART> mat(this->nStates,this->Hnn);
-		ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::Hnn_matvec,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
+		ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, 1, this, &TorusSolver<ART>::Hnn_matvec,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
 		dprob.FindEigenvalues();
 		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=dprob.Eigenvalue(i).real()/(1.*this->Ne)+se;
 //		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<" ";
@@ -72,6 +72,7 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 	sum/=(1.*NROD);
 //	cout<<N<<" "<<sum(stop-1-3)-sum(stop-1-2)<<" "<<sum(stop-1-2)-sum(stop-1)<<endl;
 	cfout<<sum<<endl;
+	cout<<sum<<endl;
 
 //	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cfout<<tcharge<<" "<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<endl;
 

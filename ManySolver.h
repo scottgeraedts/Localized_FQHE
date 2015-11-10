@@ -12,7 +12,9 @@
 #include "math.h"
 #include <ctime>
 #include "SingleSolver.h"
+extern "C"{
 #include "cblas.h"
+}
 #include "arscomp.h"
 
 //will use std::bitset library to store bits, which needs to know the number of bits at compile time
@@ -62,6 +64,7 @@ protected:
 	
 	void MultMv(ART *v, ART *w);
 	void Hnn_matvec(ART *v, ART *w);
+	void MatvecToDense();
 
 	vector< vector<int> > lookup_table_four,lookup_table_two;
 	int lookup_flipped(int i,int a,int b,int c,int d);
@@ -104,8 +107,8 @@ void ManySolver<ART>::init(int seed, double V, int _nLow, int _nHigh, double Lx,
 	NPhi2=NPhi*NPhi;
 	NPhi3=NPhi*NPhi2;
 	cache=1;
-	project=1;
-	disorder=1;
+	project=0;
+	disorder=0;
 	nLow=_nLow; nHigh=_nHigh;
 	single=SingleSolver(NPhi,0,Lx,Ly);
 	
@@ -113,6 +116,8 @@ void ManySolver<ART>::init(int seed, double V, int _nLow, int _nHigh, double Lx,
 	make_cache();
 	make_states();
 	make_Hnn();
+	cout<<Hnn<<endl;
+	MatvecToDense();
 //	make_lookups();
 
 //	clock_t t;
@@ -546,6 +551,30 @@ void ManySolver<ART>::Hnn_matvec(ART * v, ART * w){
 	double alpha=1., beta=0.;
 	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
 }
+//turn the matvec into a dense matrix
+template<class ART>
+void ManySolver<ART>::MatvecToDense(){
+	ART *dense=new ART[nStates*nStates];
+	ART *v=new ART[nStates];
+	ART *w=new ART[nStates];
+	for(int i=0;i<nStates;i++){
+		for(int j=0; j<nStates; j++){
+			if(i==j) v[j]=1;
+			else v[j]=0;
+			w[j]=0;
+		}
+		Hnn_matvec(v,w);
+		for(int j=0; j<nStates; j++){
+			dense[i+j*nStates]=w[j];
+			cout<<w[j]<<" ";
+		}
+		cout<<endl;
+	}
+	delete [] v;
+	delete [] w;
+	delete [] dense;
+}
+
 template<class ART>
 void ManySolver<ART>::print_H(){
 	ofstream Hout;
