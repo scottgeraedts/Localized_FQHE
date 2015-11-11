@@ -107,8 +107,8 @@ void ManySolver<ART>::init(int seed, double V, int _nLow, int _nHigh, double Lx,
 	NPhi2=NPhi*NPhi;
 	NPhi3=NPhi*NPhi2;
 	cache=1;
-	project=0;
-	disorder=0;
+	project=1;
+	disorder=1;
 	nLow=_nLow; nHigh=_nHigh;
 	single=SingleSolver(NPhi,0,Lx,Ly);
 	
@@ -116,8 +116,6 @@ void ManySolver<ART>::init(int seed, double V, int _nLow, int _nHigh, double Lx,
 	make_cache();
 	make_states();
 	make_Hnn();
-	cout<<Hnn<<endl;
-	MatvecToDense();
 //	make_lookups();
 
 //	clock_t t;
@@ -153,7 +151,7 @@ void ManySolver<ART>::make_states(){
 		}
 		if (count==Ne && (has_charge==0 || get_charge(i)==charge) ){
 			for(int k=0;k<nLow;k++) //these 4 lines are all that is needed for projection!
-				if(! (i & 1<<k) ) skip=1;
+				if( !(i & 1<<k) ) skip=1;
 			for(int k=NPhi-1;k>NPhi-1-nHigh;k--)
 				if(i & i<<k) skip=1;
 			if(!skip){
@@ -559,9 +557,9 @@ void ManySolver<ART>::MatvecToDense(){
 	ART *w=new ART[nStates];
 	for(int i=0;i<nStates;i++){
 		for(int j=0; j<nStates; j++){
-			if(i==j) v[j]=1;
+			if(i==j || j==0) v[j]=1;
 			else v[j]=0;
-			w[j]=0;
+			w[j]=1;
 		}
 		Hnn_matvec(v,w);
 		for(int j=0; j<nStates; j++){
