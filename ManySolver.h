@@ -77,6 +77,8 @@ protected:
 	int hasbit(int i,int a);
 	int state_to_index(int state);
 	double V_Coulomb(double qx,double qy);
+	
+	double entanglement_entropy(vector< complex<double> > *evec);
 
 	//math functions
 	double ClebschGordan(int,int,int);
@@ -92,23 +94,26 @@ protected:
 template<class ART>
 ManySolver<ART>::ManySolver(int tNe,int tcharge,int tperiodic):Ne(tNe),charge(tcharge),periodic(tperiodic){
 	disorder=0;
-	cache=0;
+	cache=1;
 	project=0;
 	lookups=0;
 	if (charge==-1) has_charge=0;
 	else has_charge=1;
 	if(project && has_charge){
 		cout<<"you can't specify a charge if you want to project, so I removed the charge conservation"<<endl;
+		has_charge=0;
 		exit(0);
 	}
+	if(disorder && has_charge){
+		cout<<"you can't specify a charge if you want disorder, so I removed the charge conservation"<<endl;
+		has_charge=0;
+		exit(0);
+	}	
 }
 template<class ART>
 void ManySolver<ART>::init(int seed, double V, int _nLow, int _nHigh, double Lx, double Ly){
 	NPhi2=NPhi*NPhi;
 	NPhi3=NPhi*NPhi2;
-	cache=1;
-	project=1;
-	disorder=1;
 	nLow=_nLow; nHigh=_nHigh;
 	single=SingleSolver(NPhi,0,Lx,Ly);
 	
@@ -116,6 +121,7 @@ void ManySolver<ART>::init(int seed, double V, int _nLow, int _nHigh, double Lx,
 	make_cache();
 	make_states();
 	make_Hnn();
+//	cout<<Hnn<<endl;
 //	make_lookups();
 
 //	clock_t t;
@@ -163,7 +169,7 @@ void ManySolver<ART>::make_states(){
 	nStates=j;		 
 //	cout<<"nStates: "<<nStates<<endl;	
 //	for(int i=0;i<nStates;i++)
-//		cout<<states[i]<<endl;
+//		cout<<(bitset<6>)states[i]<<endl;
 }
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
@@ -546,6 +552,12 @@ void ManySolver<ART>::MultMv(ART* v, ART* w){
 
 template<class ART>
 void ManySolver<ART>::Hnn_matvec(ART * v, ART * w){
+//	for(int i=0;i<nStates;i++) w[i]=0;
+//	for(int i=0;i<nStates;i++){
+//		for(int j=0;j<nStates;j++)
+//			w[i]+=v[j]*Hnn(i,j);
+//	}	
+		
 	double alpha=1., beta=0.;
 	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
 }
@@ -586,6 +598,52 @@ void ManySolver<ART>::print_H(){
 	Hout.close();
 }		
 
+/////********MEASUREMENT FUNCTIONS*************////
+template<class ART>
+double ManySolver<ART>::entanglement_entropy(vector< complex<double> > *evec){
+//	int trace_start=(nStates-nHigh)/2, trace_end=nStates; //which states to trace out
+	int trace_start=NPhi-5, trace_end=NPhi;
+	int nTrunc=0;
+
+	int trunc_part=0; //bitwise-AND with this gives just the component in the traced over states
+	for(int i=trace_start;i<trace_end;i++)
+		trunc_part=trunc_part | 1<<i;
+
+	//figure out how many reduced states there are		
+	vector<int> trunc_states;
+	bool found;
+	for(int i=0;i<nStates;i++){
+		found=false;
+		for(int j=0;j<trunc_states.size();j++)
+			if( (states[i] & ~trunc_part) ==trunc_states[j]) found=true;
+		if(!found) trunc_states.push_back(states[i] & ~trunc_part);
+	}
+	nTrunc=trunc_states.size();
+	Eigen::Matrix<ART,Eigen::Dynamic,Eigen::Dynamic> rho=Eigen::Matrix<ART,-1,-1>::Zero(nTrunc,nTrunc);
+
+	//make matrix by looping over all states that aren't traced over
+	int ti,tj;
+	for(int i=0;i<nStates;i++){
+		for(int j=0;j<nStates;j++){
+			if( (states[i] & trunc_part) == (states[j] & trunc_part) ){
+				for(ti=0;ti<nTrunc;ti++)
+					if( (states[i] & ~trunc_part) == trunc_states[ti]) break;
+				for(tj=0;tj<nTrunc;tj++)
+					if( (states[j] & ~trunc_part) == trunc_states[tj]) break;
+				
+				rho(ti,tj)+=(*evec)[i]*conj((*evec)[j]);
+			}
+		}
+	}
+			
+	//diagonalize matrix
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART,-1,-1> > rs(rho);
+	//output sum
+	double out=0;
+	for(int i=0;i<nTrunc;i++) 
+		if(rs.eigenvalues()(i)>0) out-=rs.eigenvalues()(i)*log(rs.eigenvalues()(i));
+	return out;
+}
 //////////////////////utility functions, generally	
 //someday should probably make a math library that contains all these functions
 

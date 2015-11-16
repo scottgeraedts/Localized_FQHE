@@ -38,21 +38,22 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 	Lx=(4/(1.*this->Ne))*Ly;
 
 	HaldaneV=vector<double>(4,0);
-	HaldaneV[1]=1;
-	HaldaneV[3]=0;
+	HaldaneV[1]=cos(V);
+	HaldaneV[3]=sin(V);
 	double se=self_energy();
-	int stop=10,NROD=10;	
+	double ee=0;
+	int stop=15,NROD=10;	
 	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
 //	cout<<"run with Ne="<<this->Ne<<endl;
 	stringstream filename;
 	filename.str("");
-	filename<<"gaps2/"<<name<<"_"<<this->Ne;
+	filename<<"V3_1good/"<<name<<"_"<<this->Ne;
 	ofstream cfout;
 	if(tcharge==-1) cfout.open(filename.str().c_str());
 	else cfout.open(filename.str().c_str(),ofstream::app);
 
 	for(int i=0;i<NROD;i++){
-		this->init(i,V,N,2*N,Lx,Ly);
+		this->init(i,V,0,N,Lx,Ly);
 		if(this->nStates<=stop) stop=this->nStates-1;
 	
 //		this->es.compute(this->Hnn);
@@ -62,18 +63,20 @@ TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string n
 //		for(int j=0;j<stop;j++) cfout<<tcharge<<" "<<sum(j)<<endl;
 
 	//****A call to ARPACK++. The fastest of all methods		
-//		MatrixContainer<ART> mat(this->nStates,this->Hnn);
+//		clock_t t;
+//		t=clock();
 		ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::Hnn_matvec,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
 		dprob.FindEigenvalues();
+		dprob.FindEigenvectors();
+//		cout<<"old time: "<<(float)(clock()-t)/CLOCKS_PER_SEC<<endl;
+		
 		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=dprob.Eigenvalue(i).real()/(1.*this->Ne)+se;
-//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<" ";
-//		cout<<endl;
+		ee+=this->entanglement_entropy(dprob.StlEigenvector(0));
 	}
 	sum/=(1.*NROD);
-//	cout<<N<<" "<<sum(stop-1-3)-sum(stop-1-2)<<" "<<sum(stop-1-2)-sum(stop-1)<<endl;
 	cfout<<sum<<endl;
 
-//	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cfout<<tcharge<<" "<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<endl;
+//	for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
 
 	cfout.close();
 
