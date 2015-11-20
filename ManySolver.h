@@ -111,7 +111,6 @@ ManySolver<ART>::ManySolver(){
 		disorder_strength=value_from_file(infile,0.);
 		V3overV1=value_from_file(infile,0.);
 		
-		cout<<disorder_strength<<endl;
 		infile.close();
 	}
 

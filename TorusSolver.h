@@ -37,10 +37,12 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 
 	double se=self_energy();
 	double ee=0;
-	int stop=15,NROD=1;	
+	int stop=15,NROD=40;	
 	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
 	ofstream cfout;
 	cfout.open(this->outfilename.c_str());
+	vector<double> eigvals;
+	int smallest_eigval_pos;
 
 	for(int i=0;i<NROD;i++){
 		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
@@ -61,10 +63,14 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 //		dprob.FindEigenvalues();
 		dprob.FindEigenvectors();
 		
-		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=dprob.Eigenvalue(i).real()/(1.*this->Ne)+se;
-//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<" ";
+		eigvals=vector<double>(dprob.ConvergedEigenvalues(),0);
+		for(int i=0;i<dprob.ConvergedEigenvalues();i++) eigvals[i]=dprob.Eigenvalue(i).real();
+		smallest_eigval_pos=min_element(eigvals.begin(),eigvals.end())-eigvals.begin();
+		sort(eigvals.begin(),eigvals.end());
+		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=eigvals[i]/(1.*this->Ne)+se;
+//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<eigvals[i]/(1.*this->Ne)+se<<" ";
 //		cout<<endl;
-		ee+=this->entanglement_entropy(dprob.StlEigenvector(0));
+		ee+=this->entanglement_entropy(dprob.StlEigenvector(smallest_eigval_pos));
 	}
 	sum/=(1.*NROD);
 	cfout<<sum<<endl;
