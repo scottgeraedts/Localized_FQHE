@@ -12,6 +12,7 @@
 #include "math.h"
 #include <ctime>
 #include "SingleSolver.h"
+#include <string>
 extern "C"{
 #include "cblas.h"
 }
@@ -24,22 +25,23 @@ using namespace std;
 template <class ART>
 class ManySolver{
 public:
-	ManySolver(int Ne,int charge,int periodic);
+	ManySolver();
 	void print_H();
 
 	void ZeroHnn();
 	void make_Hnn();
 	void disorderHnn();
-//	virtual void make_Hmm();
 	
 protected:
 	int Ne,NPhi,nStates,NPhi2,NPhi3;
 	int nHigh,nLow;
 	int charge,has_charge,disorder,periodic,cache,project,lookups;
-	int inversefilling,nDeltas;
+	double disorder_strength,V3overV1;
+	vector<double> HaldaneV;
+	string outfilename;
+
 	vector<int > states;
 	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> Hnn;//ManySolver in Landau basis
-	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> Hmm;//ManySolver in localized basis
 	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic> > es;
 	
 	virtual ART two_body(int a,int b) =0;//could make virtual
@@ -47,6 +49,7 @@ protected:
 	virtual int get_charge(int state)=0;//could make virtual
 
 	void init(int, double, int, int, double, double);
+	template<class T> T value_from_file(ifstream &infile, T def);
 	void make_states();
 	void make_cache();
 	void second_cache();
@@ -92,10 +95,34 @@ protected:
 ///**************DEFINITIONS HERE************///
 
 template<class ART>
-ManySolver<ART>::ManySolver(int tNe,int tcharge,int tperiodic):Ne(tNe),charge(tcharge),periodic(tperiodic){
-	disorder=0;
+ManySolver<ART>::ManySolver(){
+	//read stuff for this run from the parameters file
+	ifstream infile;
+	infile.open("params");
+	string temp("out");
+	if (infile.is_open()){
+		
+		Ne=value_from_file(infile,-2);
+		NPhi=value_from_file(infile,-2);
+		charge=value_from_file(infile,-1);
+		nLow=value_from_file(infile,0);
+		nHigh=value_from_file(infile,0);
+		outfilename=value_from_file(infile,temp);
+		disorder_strength=value_from_file(infile,0.);
+		V3overV1=value_from_file(infile,0.);
+		
+		cout<<disorder_strength<<endl;
+		infile.close();
+	}
+
+	else cout << "Unable to open file"; 	
+
 	cache=1;
-	project=0;
+	//set flags and do some simple sanity checks
+	if(disorder_strength>0) disorder=1;
+	else disorder=0;
+	if(nHigh>0 || nLow>0) project=1;
+	else project=0;
 	lookups=0;
 	if (charge==-1) has_charge=0;
 	else has_charge=1;
@@ -109,35 +136,29 @@ ManySolver<ART>::ManySolver(int tNe,int tcharge,int tperiodic):Ne(tNe),charge(tc
 		has_charge=0;
 		exit(0);
 	}	
-}
-template<class ART>
-void ManySolver<ART>::init(int seed, double V, int _nLow, int _nHigh, double Lx, double Ly){
+	
+	HaldaneV=vector<double>(4,0);
+	HaldaneV[1]=1/(1.+V3overV1);
+	HaldaneV[3]=V3overV1/(1.+V3overV1);
+
+	//you wouldn't believe how much faster this makes the code
 	NPhi2=NPhi*NPhi;
 	NPhi3=NPhi*NPhi2;
-	nLow=_nLow; nHigh=_nHigh;
-	single=SingleSolver(NPhi,0,Lx,Ly);
-	
-	single.init(seed,V,nLow,nHigh);
-	make_cache();
-	make_states();
-	make_Hnn();
-//	cout<<Hnn<<endl;
-//	make_lookups();
-
-//	clock_t t;
-//	t=clock();
-//	make_Hnn();
-//	MatrixContainer<ART> mat(this->nStates,this->Hnn);
-//	mat.eigenvalues(2);
-//	cout<<"old time: "<<(float)(clock()-t)/CLOCKS_PER_SEC<<endl;
-//	
-//	t=clock();	
-//	second_cache();
-//	ARCompStdEig<double, ManySolver<ART> >  dprob(nStates, 2, this, &ManySolver<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
-//	dprob.FindEigenvalues();
-//	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<"test: "<<dprob.Eigenvalue(i)<<endl;
-//	cout<<"new time: "<<(float)(clock()-t)/CLOCKS_PER_SEC<<endl;
 }
+
+template<class ART> template<class T>
+T ManySolver<ART>::value_from_file(ifstream &infile, T def){
+	string line;
+	stringstream convert;
+	T out;
+	if(getline(infile,line)){
+		convert.str("");
+		convert<<line;
+		convert>>out;
+		return out;
+	}
+	else return def;
+}	
 
 ////*********************SETUP FUNCTIONS
 /// A state can be represented by a bit string, 
@@ -173,6 +194,8 @@ void ManySolver<ART>::make_states(){
 }
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
+	if(cache) make_cache();
+	make_states();
 	Hnn=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 	int j;
 	ART temp;
@@ -552,14 +575,14 @@ void ManySolver<ART>::MultMv(ART* v, ART* w){
 
 template<class ART>
 void ManySolver<ART>::Hnn_matvec(ART * v, ART * w){
-//	for(int i=0;i<nStates;i++) w[i]=0;
-//	for(int i=0;i<nStates;i++){
-//		for(int j=0;j<nStates;j++)
-//			w[i]+=v[j]*Hnn(i,j);
-//	}	
+	for(int i=0;i<nStates;i++) w[i]=0;
+	for(int i=0;i<nStates;i++){
+		for(int j=0;j<nStates;j++)
+			w[i]+=v[j]*Hnn(i,j);
+	}	
 		
-	double alpha=1., beta=0.;
-	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
+//	double alpha=1., beta=0.;
+//	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
 }
 //turn the matvec into a dense matrix
 template<class ART>

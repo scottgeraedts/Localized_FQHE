@@ -8,15 +8,13 @@ class TorusSolver:public ManySolver<ART>{
 
 public:
 
-	TorusSolver(int Ne,int charge, double V, int invfilling, string name,int);
-	void make_Hnn();
+	TorusSolver(int);
 	double numerical_semidefinite_integral(double dx,double start,double tol,double z);
 	void add_disorder(int seed, double V,int,int);
 
 private:
 
 	double Lx,Ly,V;
-	vector<double> HaldaneV;
 	int count;
 	double self_energy();
 	double Misra_onehalf(double t,double z);
@@ -31,46 +29,41 @@ private:
 };
 
 template <class ART>
-TorusSolver<ART>::TorusSolver(int tNe,int tcharge, double V, int _NPhi, string name, int N):ManySolver<ART>(tNe,tcharge,1){
+TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	//stuff unique to the torus
-	this->NPhi=_NPhi;
-	Ly=sqrt(M_PI*this->NPhi*this->Ne/2.);//aspect ratio is Lx/Ly=Ne/4
-	Lx=(4/(1.*this->Ne))*Ly;
+	double alpha=1.;
+	Ly=sqrt(M_PI*this->NPhi*this->Ne/2.*alpha);//aspect ratio is Lx/Ly=Ne/4*alpha
+	Lx=(4/(1.*this->Ne*alpha))*Ly;
 
-	HaldaneV=vector<double>(4,0);
-	HaldaneV[1]=cos(V);
-	HaldaneV[3]=sin(V);
 	double se=self_energy();
 	double ee=0;
-	int stop=15,NROD=10;	
+	int stop=15,NROD=1;	
 	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
-//	cout<<"run with Ne="<<this->Ne<<endl;
-	stringstream filename;
-	filename.str("");
-	filename<<"V3_1good/"<<name<<"_"<<this->Ne;
 	ofstream cfout;
-	if(tcharge==-1) cfout.open(filename.str().c_str());
-	else cfout.open(filename.str().c_str(),ofstream::app);
+	cfout.open(this->outfilename.c_str());
 
 	for(int i=0;i<NROD;i++){
-		this->init(i,V,0,N,Lx,Ly);
+		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
+		this->single.init(i,this->disorder_strength,this->nLow,this->nHigh);
+		this->make_Hnn();
+		
 		if(this->nStates<=stop) stop=this->nStates-1;
 	
 //		this->es.compute(this->Hnn);
 //		sum=this->es.eigenvalues();
 //		sum=sum/(1.*this->Ne);
 //		sum=sum.array()+se;
-//		for(int j=0;j<stop;j++) cfout<<tcharge<<" "<<sum(j)<<endl;
+//		for(int j=0;j<stop;j++) cfout<<" "<<sum(j)<<endl;
+//		cout<<this->es.eigenvectors().col(0)<<endl;
 
 	//****A call to ARPACK++. The fastest of all methods		
-//		clock_t t;
-//		t=clock();
 		ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::Hnn_matvec,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
-		dprob.FindEigenvalues();
+//		dprob.FindEigenvalues();
 		dprob.FindEigenvectors();
-//		cout<<"old time: "<<(float)(clock()-t)/CLOCKS_PER_SEC<<endl;
 		
 		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=dprob.Eigenvalue(i).real()/(1.*this->Ne)+se;
+//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i).real()/(1.*this->Ne)+se<<" ";
+//		cout<<endl;
 		ee+=this->entanglement_entropy(dprob.StlEigenvector(0));
 	}
 	sum/=(1.*NROD);
@@ -232,8 +225,8 @@ ART TorusSolver<ART>::four_body_haldane(int a, int b, int c, int d){
 	if(m<0) startm=1;
 	if(k<0) startk=1;
 	
-	for(int i=0;i<HaldaneV.size();i++){
-		if(HaldaneV[i]!=0){
+	for(int i=0;i<this->HaldaneV.size();i++){
+		if(this->HaldaneV[i]!=0){
 			for(int pm=startm; pm>-1;pm++){
 				qm=2.*M_PI*(m+pm*this->NPhi)/Lx;
 				expm=exp(-0.5*qm*qm);
@@ -268,7 +261,7 @@ ART TorusSolver<ART>::four_body_haldane(int a, int b, int c, int d){
 					out+=expm*expk*Hermite(qm+qk,i)*Hermite(qk-qm,i);
 				}
 			}
-			bigout+=HaldaneV[i]*out;
+			bigout+=this->HaldaneV[i]*out;
 			out=0;
 		}
 	}		
