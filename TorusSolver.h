@@ -37,7 +37,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 
 	double se=self_energy();
 	double ee=0;
-	int stop=15,NROD=40;	
+	int stop=15,NROD=1;	
 	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
 	ofstream cfout;
 	cfout.open(this->outfilename.c_str());
@@ -48,7 +48,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
 		this->single.init(i,this->disorder_strength,this->nLow,this->nHigh);
 		this->make_Hnn();
-		
+		cout<<this->Hnn<<endl;		
 		if(this->nStates<=stop) stop=this->nStates-1;
 	
 //		this->es.compute(this->Hnn);
