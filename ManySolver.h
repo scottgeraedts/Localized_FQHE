@@ -34,7 +34,7 @@ public:
 	
 protected:
 	int Ne,NPhi,nStates,NPhi2,NPhi3;
-	int nHigh,nLow;
+	int nHigh,nLow,NROD;
 	int charge,has_charge,disorder,periodic,cache,project,lookups;
 	double disorder_strength,V3overV1;
 	vector<double> HaldaneV;
@@ -110,6 +110,7 @@ ManySolver<ART>::ManySolver(){
 		outfilename=value_from_file(infile,temp);
 		disorder_strength=value_from_file(infile,0.);
 		V3overV1=value_from_file(infile,0.);
+		NROD=value_from_file(infile,1);
 		
 		infile.close();
 	}
@@ -189,7 +190,7 @@ void ManySolver<ART>::make_states(){
 	nStates=j;		 
 //	cout<<"nStates: "<<nStates<<endl;	
 //	for(int i=0;i<nStates;i++)
-//		cout<<(bitset<6>)states[i]<<endl;
+//		cout<<(bitset<9>)states[i]<<endl;
 }
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
@@ -623,8 +624,7 @@ void ManySolver<ART>::print_H(){
 /////********MEASUREMENT FUNCTIONS*************////
 template<class ART>
 double ManySolver<ART>::entanglement_entropy(vector< complex<double> > *evec){
-//	int trace_start=(nStates-nHigh)/2, trace_end=nStates; //which states to trace out
-	int trace_start=NPhi-5, trace_end=NPhi;
+	int trace_start=(NPhi-nHigh)/2, trace_end=NPhi; //which states to trace out
 	int nTrunc=0;
 
 	int trunc_part=0; //bitwise-AND with this gives just the component in the traced over states
@@ -657,7 +657,6 @@ double ManySolver<ART>::entanglement_entropy(vector< complex<double> > *evec){
 			}
 		}
 	}
-			
 	//diagonalize matrix
 	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART,-1,-1> > rs(rho);
 	//output sum

@@ -34,46 +34,51 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	double alpha=1.;
 	Ly=sqrt(M_PI*this->NPhi*this->Ne/2.*alpha);//aspect ratio is Lx/Ly=Ne/4*alpha
 	Lx=(4/(1.*this->Ne*alpha))*Ly;
+	this->periodic=1;
 
 	double se=self_energy();
 	double ee=0;
-	int stop=15,NROD=1;	
+	int stop=15;	
 	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
 	ofstream cfout;
 	cfout.open(this->outfilename.c_str());
 	vector<double> eigvals;
 	int smallest_eigval_pos;
+	vector<complex<double> > eigvec;
+	bool arpack=true;
 
-	for(int i=0;i<NROD;i++){
+	for(int i=0;i<this->NROD;i++){
 		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
 		this->single.init(i,this->disorder_strength,this->nLow,this->nHigh);
 		this->make_Hnn();
-		cout<<this->Hnn<<endl;		
 		if(this->nStates<=stop) stop=this->nStates-1;
 	
-//		this->es.compute(this->Hnn);
-//		sum=this->es.eigenvalues();
-//		sum=sum/(1.*this->Ne);
-//		sum=sum.array()+se;
-//		for(int j=0;j<stop;j++) cfout<<" "<<sum(j)<<endl;
-//		cout<<this->es.eigenvectors().col(0)<<endl;
-
-	//****A call to ARPACK++. The fastest of all methods		
-		ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::Hnn_matvec,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
-//		dprob.FindEigenvalues();
-		dprob.FindEigenvectors();
+		if(!arpack){
+			this->es.compute(this->Hnn);
+			sum=this->es.eigenvalues();
+			sum=sum/(1.*this->Ne);
+			sum=sum.array()+se;
+			eigvec=vector<complex<double> >(this->nStates,0);
+			for(int j=0;j<this->nStates;j++) eigvec[j]=this->es.eigenvectors().col(0)(j);
+			ee+=this->entanglement_entropy(&eigvec);
+		}else{
+		//****A call to ARPACK++. The fastest of all methods		
+			ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::Hnn_matvec,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
+	//		dprob.FindEigenvalues();
+			dprob.FindEigenvectors();
 		
-		eigvals=vector<double>(dprob.ConvergedEigenvalues(),0);
-		for(int i=0;i<dprob.ConvergedEigenvalues();i++) eigvals[i]=dprob.Eigenvalue(i).real();
-		smallest_eigval_pos=min_element(eigvals.begin(),eigvals.end())-eigvals.begin();
-		sort(eigvals.begin(),eigvals.end());
-		for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=eigvals[i]/(1.*this->Ne)+se;
-//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<eigvals[i]/(1.*this->Ne)+se<<" ";
-//		cout<<endl;
-		ee+=this->entanglement_entropy(dprob.StlEigenvector(smallest_eigval_pos));
+			eigvals=vector<double>(dprob.ConvergedEigenvalues(),0);
+			for(int i=0;i<dprob.ConvergedEigenvalues();i++) eigvals[i]=dprob.Eigenvalue(i).real();
+			smallest_eigval_pos=min_element(eigvals.begin(),eigvals.end())-eigvals.begin();
+			sort(eigvals.begin(),eigvals.end());
+			for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=eigvals[i]/(1.*this->Ne)+se;
+	//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<eigvals[i]/(1.*this->Ne)+se<<" ";
+	//		cout<<endl;
+			ee+=this->entanglement_entropy(dprob.StlEigenvector(smallest_eigval_pos));
+		}
 	}
-	sum/=(1.*NROD);
-	cfout<<sum<<endl;
+	sum/=(1.*this->NROD);
+	cfout<<sum[0]<<" "<<sum[2]<<" "<<sum[3]<<" "<<ee/(1.*this->NROD)<<endl;
 
 //	for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
 
