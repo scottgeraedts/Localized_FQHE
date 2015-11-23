@@ -28,7 +28,6 @@ void SingleSolver::init(int seed,double V, int nLow, int nHigh){
 	Potential p_gauss("gaussian",qbounds,seed,Lx,Ly,params);
 	make_Hamiltonian(p_gauss);
 //	cout<<Hnn<<endl;
-//	cout<<proj.eigenvectors()<<endl;
 //	cout<<proj.eigenvalues()<<endl;
 }
 void SingleSolver::printEnergy(int nLow, int nHigh){

@@ -81,7 +81,9 @@ protected:
 	int state_to_index(int state);
 	double V_Coulomb(double qx,double qy);
 	
-	double entanglement_entropy(vector< complex<double> > *evec);
+	double entanglement_entropy(const vector< complex<double> > &evec);
+	void basis_convert(vector<ART> &evec);
+	void expand(int,ART,int, vector<ART> &new_evec, const vector<int> &orig_states);
 
 	//math functions
 	double ClebschGordan(int,int,int);
@@ -137,7 +139,6 @@ ManySolver<ART>::ManySolver(){
 		has_charge=0;
 		exit(0);
 	}	
-	
 	HaldaneV=vector<double>(4,0);
 	HaldaneV[1]=1/(1.+V3overV1);
 	HaldaneV[3]=V3overV1/(1.+V3overV1);
@@ -624,7 +625,7 @@ void ManySolver<ART>::print_H(){
 
 /////********MEASUREMENT FUNCTIONS*************////
 template<class ART>
-double ManySolver<ART>::entanglement_entropy(vector< complex<double> > *evec){
+double ManySolver<ART>::entanglement_entropy(const vector< complex<double> > &evec){
 	double out=0;
 	int trace_start,trace_end;
 	ofstream spectout;
@@ -648,7 +649,7 @@ double ManySolver<ART>::entanglement_entropy(vector< complex<double> > *evec){
 		//figure out how many reduced states there are		
 		trunc_states.clear();
 		nTrunc=0;
-		for(int i=0;i<nStates;i++){
+		for(int i=0;i<evec.size();i++){
 			found=false;
 			for(int j=0;j<trunc_states.size();j++)
 				if( (states[i] & ~trunc_part) ==trunc_states[j]) found=true;
@@ -658,15 +659,15 @@ double ManySolver<ART>::entanglement_entropy(vector< complex<double> > *evec){
 		Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic> rho=Eigen::Matrix<double,-1,-1>::Zero(nTrunc,nTrunc);
 		//make matrix by looping over all states that aren't traced over
 		int ti,tj;
-		for(int i=0;i<nStates;i++){
-			for(int j=0;j<nStates;j++){
+		for(int i=0;i<evec.size();i++){
+			for(int j=0;j<evec.size();j++){
 				if( (states[i] & trunc_part) == (states[j] & trunc_part) ){
 					for(ti=0;ti<nTrunc;ti++)
 						if( (states[i] & ~trunc_part) == trunc_states[ti]) break;
 					for(tj=0;tj<nTrunc;tj++)
 						if( (states[j] & ~trunc_part) == trunc_states[tj]) break;
 				
-					rho(ti,tj)+=((*evec)[i]*conj((*evec)[j])).real();
+					rho(ti,tj)+=(evec[i]*conj(evec[j])).real();
 				}
 			}
 		}
@@ -707,6 +708,70 @@ double ManySolver<ART>::entanglement_entropy(vector< complex<double> > *evec){
 	}
 	return out/(1.*NPhi);
 }
+//convert a wavefunction in the truncated-orbitals basis to one in the Landau basis
+template<class ART>
+void ManySolver<ART>::basis_convert(vector<ART> &evec){
+	//this code is just a repeat of make_states, but it makes the untruncated basis
+	vector<int> orig_states;
+	for(int i=0;i<intpow(2,NPhi);i++){
+		if (count_bits(i)==Ne){
+			orig_states.push_back(i);
+		}
+	}
+	vector<ART> new_evec(orig_states.size(),0);
+
+	for(int i=0;i<nStates;i++){
+		expand(states[i],evec[i],0,new_evec,orig_states);
+	}
+	evec=new_evec;
+	
+}
+//a recursive function used to help with the above basis change
+//it finds the first set bit in a state, and expands that bit in the old basis
+//then it chops off that part of the bit and recurses
+template<class ART>
+void ManySolver<ART>::expand(int state, ART coeff, int orig_state, vector<ART> &new_evec, const vector<int> &orig_states){
+	vector<int>::const_iterator low;
+	int largest_bit=-1;
+	int orig_state2;
+	ART temp;
+	//cout<<(bitset<6>)orig_state<<" "<<(bitset<6>)state<<" "<<coeff<<endl;
+	//find largest set bit
+	for(int i=NPhi;i>-1;i--){
+		if(state & 1<<i) {
+			largest_bit=i;
+			break;
+		}
+	}
+//	cout<<largest_bit<<endl;
+	//if can't find largest set bit, return
+	if(largest_bit==-1){
+		//this code is basically a copy of lookup_flipped, but it acts on the original basis
+//		cout<<coeff<<endl;
+		low=lower_bound(orig_states.begin(),orig_states.end(),orig_state);
+		if(low!=orig_states.end()){
+			new_evec[low-orig_states.begin()]+=coeff;
+		}else{
+			cout<<"error in expand: "<<(bitset<30>)orig_state<<endl; exit(0);
+		}
+	}
+	//else recurse
+	else{
+		for(int i=0;i<NPhi;i++){
+			if(orig_state & 1<<i) continue; //if that bit is already set, then this state doesn't contribute and we are done
+			else orig_state2=orig_state | 1<<i;
+			
+			//to get the sign right, remember that we are expanding bits from largest to smallest. So if the expanded bit is not the smallest, we need to do 
+			//(-1)^(number of smaller bits)
+			if(count_bits(orig_state%(1<<i))%2==1) temp=(ART)(-1);
+			else temp=(ART)1;
+			temp*=conj(single.evec(largest_bit,i));
+	//		cout<<i<<" "<<largest_bit<<" "<<temp<<endl;
+			expand(state%(1<<largest_bit),coeff*temp,orig_state2,new_evec,orig_states);
+		}
+	}
+}
+
 //////////////////////utility functions, generally	
 //someday should probably make a math library that contains all these functions
 

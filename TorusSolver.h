@@ -46,7 +46,8 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	int smallest_eigval_pos;
 	vector<complex<double> > eigvec;
 	bool arpack=true;
-
+	int q=(this->NPhi-this->nHigh)/this->Ne;
+	vector<int> lowlevpos;
 	for(int i=0;i<this->NROD;i++){
 		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
 		this->single.init(i,this->disorder_strength,this->nLow,this->nHigh);
@@ -60,7 +61,6 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 			sum=sum.array()+se;
 			eigvec=vector<complex<double> >(this->nStates,0);
 			for(int j=0;j<this->nStates;j++) eigvec[j]=this->es.eigenvectors().col(0)(j);
-			ee+=this->entanglement_entropy(&eigvec);
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
 			ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::Hnn_matvec,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
@@ -68,19 +68,34 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 			dprob.FindEigenvectors();
 		
 			eigvals=vector<double>(dprob.ConvergedEigenvalues(),0);
-			for(int i=0;i<dprob.ConvergedEigenvalues();i++) eigvals[i]=dprob.Eigenvalue(i).real();
-			smallest_eigval_pos=min_element(eigvals.begin(),eigvals.end())-eigvals.begin();
+			for(int k=0;k<dprob.ConvergedEigenvalues();k++) eigvals[k]=dprob.Eigenvalue(k).real();
+			
+			//get the positions of the q smallest  eigenvectors
+			lowlevpos=vector<int>(q,dprob.ConvergedEigenvalues()-1 );
+			for(int k=0;k<dprob.ConvergedEigenvalues();k++){
+				for(int j1=0;j1<q;j1++){
+					if(eigvals[k]<eigvals[lowlevpos[j1]]){
+						for(int j2=q-1;j2>j1;j2--) lowlevpos[j2]=lowlevpos[j2-1];
+						lowlevpos[j1]=k;
+						break;
+					}
+				}
+			}
 			sort(eigvals.begin(),eigvals.end());
-			for(int i=0;i<dprob.ConvergedEigenvalues();i++) sum(i)+=eigvals[i]/(1.*this->Ne)+se;
+			for(int k=0;k<dprob.ConvergedEigenvalues();k++) sum(k)+=eigvals[k]/(1.*this->Ne)+se;
 	//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<eigvals[i]/(1.*this->Ne)+se<<" ";
 	//		cout<<endl;
-			ee+=this->entanglement_entropy(dprob.StlEigenvector(smallest_eigval_pos));
+
+			for(int k=0;k<q;k++){
+				eigvec=*(dprob.StlEigenvector(lowlevpos[k]));
+				if(this->project) this->basis_convert(eigvec);
+				ee+=this->entanglement_entropy(eigvec);
+			}
 		}
 	}
 	sum/=(1.*this->NROD);
-	cfout<<sum[0]<<" "<<sum[2]<<" "<<sum[3]<<" "<<ee/(1.*this->NROD)<<endl;
-
-//	for(int i=0;i<stop;i++) cfout<<tcharge<<" "<<sum(i)<<endl;
+	cfout<<sum[0]<<" "<<sum[2]<<" "<<sum[3]<<" "<<ee/(1.*this->NROD*q)<<endl;
+//	cout<<sum<<endl;
 
 	cfout.close();
 
