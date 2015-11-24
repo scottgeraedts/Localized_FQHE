@@ -25,11 +25,19 @@ class MatrixWithProduct {
 	Eigen::SparseMatrix<ART> sparse;
 	Eigen::SimplicialLDLT< Eigen::SparseMatrix<ART> > sparseLU_solver;
 	int *ipiv;
+	vector<double> eigvals;
+	vector< vector<ART> > eigvecs;
+	vector<int> lowlevpos;
 
  public:
 
   int nrows() { return m; }
   int ncols() { return n; }
+	void setrows(int x){ m=x; n=x;}
+	
+	double getE(int a){return eigvals[a];}
+	vector<ART> getEV(int a){return eigvecs[a];}
+	int getPos(int a){return lowlevpos[a];}
 
   virtual void MultMv(ART* v, ART* w) = 0;
   virtual Eigen::Matrix<ART, Eigen::Dynamic, 1> MultEigen(Eigen::Matrix<ART, Eigen::Dynamic, 1>) = 0;//used so we can communicate with my lanczos, which is based on eigen
@@ -47,7 +55,7 @@ class MatrixWithProduct {
   void sparseLU();
   void sparseSolve();
 
-  void eigenvalues(int k);
+  int eigenvalues(int k, int q);
   double calcVarEigen(Eigen::Matrix<ART, Eigen::Dynamic, 1> v);
     
   ~MatrixWithProduct();
@@ -58,6 +66,15 @@ class MatrixWithProduct {
     m = nrows;
     n = (ncols?ncols:nrows);
     E1=_E1; E2=_E2;
+    dense=NULL;
+    ipiv=NULL;
+  } // Constructor.
+  MatrixWithProduct()
+  // Constructor.
+  {
+    m = 1;
+    n = 1;
+    E1=0.; E2=0.;
     dense=NULL;
     ipiv=NULL;
   } // Constructor.
@@ -210,10 +227,33 @@ double MatrixWithProduct<ART>::calcVarEigen(Eigen::Matrix<ART, Eigen::Dynamic, 1
 }
 
 template <class ART> 
-void MatrixWithProduct<ART>::eigenvalues(int k){
-	ARCompStdEig<double, MatrixWithProduct<ART> >  dprob(ncols(), k, this, &MatrixWithProduct<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
-	dprob.FindEigenvalues();
-	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i)<<endl;
+int MatrixWithProduct<ART>::eigenvalues(int stop, int q=1){
+	ARCompStdEig<double, MatrixWithProduct<ART> >  dprob(ncols(), stop, this, &MatrixWithProduct<ART>::MultMv,"SR",(int)0, 1e-10,1e6);
+	dprob.FindEigenvectors();
+
+	eigvals=vector<double>(dprob.ConvergedEigenvalues(),0);
+	vector<ART>temp(n,0);
+	eigvecs=vector<vector<ART> >(dprob.ConvergedEigenvalues(),temp);
+	for(int k=0;k<dprob.ConvergedEigenvalues();k++){
+		eigvals[k]=dprob.Eigenvalue(k).real();
+		eigvecs[k]=*(dprob.StlEigenvector(k));
+	}
+
+		
+	//get the positions of the q smallest  eigenvectors
+	lowlevpos=vector<int>(q,dprob.ConvergedEigenvalues()-1 );
+	for(int k=0;k<dprob.ConvergedEigenvalues();k++){
+		for(int j1=0;j1<q;j1++){
+			if(eigvals[k]<eigvals[lowlevpos[j1]]){
+				for(int j2=q-1;j2>j1;j2--) lowlevpos[j2]=lowlevpos[j2-1];
+				lowlevpos[j1]=k;
+				break;
+			}
+		}
+	}
+	sort(eigvals.begin(),eigvals.end());
+	return dprob.ConvergedEigenvalues();
+//	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i)<<endl;
 	
 }	
 //destructor, delete the dense matrices

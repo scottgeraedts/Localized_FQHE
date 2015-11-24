@@ -40,11 +40,10 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	Eigen::VectorXd ee=Eigen::VectorXd::Zero(this->NPhi);
 	int stop=15;	
 	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
-	vector<double> eigvals;
 	vector<complex<double> > eigvec;
 	bool arpack=true;
 	int q=(this->NPhi-this->nHigh)/this->Ne;
-	vector<int> lowlevpos;
+	int nconverged;
 	for(int i=0;i<this->NROD;i++){
 		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
 		this->single.init(i,this->disorder_strength,this->nLow,this->nHigh);
@@ -60,34 +59,21 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 			for(int j=0;j<this->nStates;j++) eigvec[j]=this->es.eigenvectors().col(0)(j);
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
-			ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::Hnn_matvec,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
+
+			nconverged=this->eigenvalues(stop,q);
+//			ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
 	//		dprob.FindEigenvalues();
-			dprob.FindEigenvectors();
+//			dprob.FindEigenvectors();
 		
-			eigvals=vector<double>(dprob.ConvergedEigenvalues(),0);
-			for(int k=0;k<dprob.ConvergedEigenvalues();k++) eigvals[k]=dprob.Eigenvalue(k).real();
-			
-			//get the positions of the q smallest  eigenvectors
-			lowlevpos=vector<int>(q,dprob.ConvergedEigenvalues()-1 );
-			for(int k=0;k<dprob.ConvergedEigenvalues();k++){
-				for(int j1=0;j1<q;j1++){
-					if(eigvals[k]<eigvals[lowlevpos[j1]]){
-						for(int j2=q-1;j2>j1;j2--) lowlevpos[j2]=lowlevpos[j2-1];
-						lowlevpos[j1]=k;
-						break;
-					}
-				}
-			}
-			sort(eigvals.begin(),eigvals.end());
-			for(int k=0;k<dprob.ConvergedEigenvalues();k++) sum(k)+=eigvals[k]/(1.*this->Ne)+se;
-	//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<eigvals[i]/(1.*this->Ne)+se<<" ";
+			for(int k=0;k<nconverged;k++) sum(k)+=this->getE(k)/(1.*this->Ne)+se;
+	//		for(int i=0;i<this->dprob.ConvergedEigenvalues();i++) cout<<eigvals[i]/(1.*this->Ne)+se<<" ";
 	//		cout<<endl;
 
 			for(int j=0;j<this->NPhi;j++){
 				this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
 				this->rho=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
 				for(int k=0;k<q;k++){
-					eigvec=*(dprob.StlEigenvector(lowlevpos[k]));
+					eigvec=this->getEV(this->getPos(k));
 					if(this->project) this->basis_convert(eigvec);
 					this->ee_compute_rho(eigvec,1./(1.*q));
 				}

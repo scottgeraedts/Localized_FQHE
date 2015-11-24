@@ -13,6 +13,7 @@
 #include <ctime>
 #include "SingleSolver.h"
 #include <string>
+#include "matprod.h"
 extern "C"{
 #include "cblas.h"
 }
@@ -23,7 +24,7 @@ extern "C"{
 using namespace std;
 
 template <class ART>
-class ManySolver{
+class ManySolver:public MatrixWithProduct<ART>{
 public:
 	ManySolver();
 	void print_H();
@@ -65,8 +66,9 @@ protected:
 	//stuff to deal with disorder
 	SingleSolver single; //for other geometries, this would need to be promoted to a single-electron parent class
 	
+	void explicitMultMv(ART *v, ART *w);
 	void MultMv(ART *v, ART *w);
-	void Hnn_matvec(ART *v, ART *w);
+	Eigen::Matrix<ART,-1,1> MultEigen(Eigen::Matrix<ART,-1,1>);
 	void MatvecToDense();
 
 	vector< vector<int> > lookup_table_four,lookup_table_two;
@@ -105,7 +107,7 @@ protected:
 ///**************DEFINITIONS HERE************///
 
 template<class ART>
-ManySolver<ART>::ManySolver(){
+ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(){
 	//read stuff for this run from the parameters file
 	ifstream infile;
 	infile.open("params");
@@ -126,7 +128,7 @@ ManySolver<ART>::ManySolver(){
 	}
 
 	else cout << "Unable to open file"; 	
-
+	
 	cache=1;
 	//set flags and do some simple sanity checks
 	if(disorder_strength>0) disorder=1;
@@ -197,6 +199,7 @@ void ManySolver<ART>::make_states(){
 		}
 	}
 	nStates=j;		 
+	this->setrows(nStates);
 //	cout<<"nStates: "<<nStates<<endl;	
 //	for(int i=0;i<nStates;i++)
 //		cout<<(bitset<9>)states[i]<<endl;
@@ -504,7 +507,7 @@ int ManySolver<ART>::lookup_flipped(int i,int a,int b){
 
 ////******MATVECS*****////
 template<class ART>
-void ManySolver<ART>::MultMv(ART* v, ART* w){
+void ManySolver<ART>::explicitMultMv(ART* v, ART* w){
 //an old matvec using the matrix Hnn
 //	double alpha=1., beta=0.;
 //	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
@@ -583,7 +586,7 @@ void ManySolver<ART>::MultMv(ART* v, ART* w){
 } //  MultMv.
 
 template<class ART>
-void ManySolver<ART>::Hnn_matvec(ART * v, ART * w){
+void ManySolver<ART>::MultMv(ART * v, ART * w){
 	for(int i=0;i<nStates;i++) w[i]=0;
 	for(int i=0;i<nStates;i++){
 		for(int j=0;j<nStates;j++)
@@ -592,6 +595,11 @@ void ManySolver<ART>::Hnn_matvec(ART * v, ART * w){
 		
 //	double alpha=1., beta=0.;
 //	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
+}
+
+template<class ART>
+Eigen::Matrix<ART,-1,1> ManySolver<ART>::MultEigen(Eigen::Matrix<ART,-1,1> invec){
+	return Hnn*invec;
 }
 //turn the matvec into a dense matrix
 template<class ART>
