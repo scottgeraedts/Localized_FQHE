@@ -37,13 +37,10 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	this->periodic=1;
 
 	double se=self_energy();
-	double ee=0;
+	Eigen::VectorXd ee=Eigen::VectorXd::Zero(this->NPhi);
 	int stop=15;	
 	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
-	ofstream cfout;
-	cfout.open(this->outfilename.c_str());
 	vector<double> eigvals;
-	int smallest_eigval_pos;
 	vector<complex<double> > eigvec;
 	bool arpack=true;
 	int q=(this->NPhi-this->nHigh)/this->Ne;
@@ -86,19 +83,36 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	//		for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<eigvals[i]/(1.*this->Ne)+se<<" ";
 	//		cout<<endl;
 
-			for(int k=0;k<q;k++){
-				eigvec=*(dprob.StlEigenvector(lowlevpos[k]));
-				if(this->project) this->basis_convert(eigvec);
-				ee+=this->entanglement_entropy(eigvec);
-			}
-		}
-	}
+			for(int j=0;j<this->NPhi;j++){
+				this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
+				this->rho=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
+				for(int k=0;k<q;k++){
+					eigvec=*(dprob.StlEigenvector(lowlevpos[k]));
+					if(this->project) this->basis_convert(eigvec);
+					this->ee_compute_rho(eigvec,1./(1.*q));
+				}
+				ee(j)+=this->ee_eval_rho();
+			}//NPhi
+		}//if arpack
+	}//NROD
+
+	//write energies
+	ofstream eout;
 	sum/=(1.*this->NROD);
-	cfout<<sum[0]<<" "<<sum[2]<<" "<<sum[3]<<" "<<ee/(1.*this->NROD*q)<<endl;
-//	cout<<sum<<endl;
+	eout.open("energies");
+	for(int i=0;i<stop;i++) eout<<sum(i)<<" ";
+	eout<<endl;
+	eout.close();
 
-	cfout.close();
-
+	//write entropy
+	ofstream sout;
+	ee/=(1.*this->NROD);
+	sout.open("entropy");
+	sout<<ee.sum()/(1.*this->NPhi)<<" ";
+	for(int i=0;i<this->NPhi;i++) sout<<ee(i)<<" ";
+	sout<<endl;
+	sout.close();
+	
 }
 ///functions which are definitely unique to the torus
 template <class ART>

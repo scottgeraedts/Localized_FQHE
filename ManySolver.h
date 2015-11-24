@@ -81,7 +81,14 @@ protected:
 	int state_to_index(int state);
 	double V_Coulomb(double qx,double qy);
 	
-	double entanglement_entropy(const vector< complex<double> > &evec);
+	double entanglement_entropy(const vector<ART> &evec);
+	void ee_setup(int trunc_start, int trunc_end, int vecsize);
+	void ee_compute_rho(const vector<ART> &evec, double coeff);
+	double ee_eval_rho();
+	void plot_spectrum(string name);
+	Eigen::Matrix<ART,-1,-1> rho;
+	vector<int> trunc_states;
+	int trunc_part;
 	void basis_convert(vector<ART> &evec);
 	void expand(int,ART,int, vector<ART> &new_evec, const vector<int> &orig_states);
 
@@ -623,90 +630,107 @@ void ManySolver<ART>::print_H(){
 	Hout.close();
 }		
 
-/////********MEASUREMENT FUNCTIONS*************////
+/////********ENTANGLEMENT ENTROPY RELATED FUNCTIONS*************////
+//a wrapper to calculate entanglement entropy in one shot
 template<class ART>
-double ManySolver<ART>::entanglement_entropy(const vector< complex<double> > &evec){
+double ManySolver<ART>::entanglement_entropy(const vector< ART > &evec){
 	double out=0;
-	int trace_start,trace_end;
-	ofstream spectout;
-	stringstream filename;
-	vector<int> rows; 
-	int nTrunc, trunc_part;
-	vector<int> trunc_states;
-	bool found;
-//	for(int j=0;j<nStates;j++) cout<<(bitset<9>)states[j]<<" "<<(*evec)[j]<<endl;
-	Eigen::Matrix<double,-1,-1> rhoblock;
 	for(int orb=0;orb<NPhi;orb++){
-		trace_start=orb; trace_end=(orb+NPhi/2)%NPhi; //which states to trace out
-
-		//compute trunc_part
-		trunc_part=0; //bitwise-AND with this gives just the component in the traced over states
-		for(int i=0;i<NPhi;i++){
-			if ((i>=trace_start && i <trace_end && trace_end>trace_start) || (trace_end<trace_start && (i < trace_end || i >= trace_start) ) )
-				trunc_part=trunc_part | 1<<i;
-		}
-
-		//figure out how many reduced states there are		
-		trunc_states.clear();
-		nTrunc=0;
-		for(int i=0;i<evec.size();i++){
-			found=false;
-			for(int j=0;j<trunc_states.size();j++)
-				if( (states[i] & ~trunc_part) ==trunc_states[j]) found=true;
-			if(!found) trunc_states.push_back(states[i] & ~trunc_part);
-		}
-		nTrunc=trunc_states.size();
-		Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic> rho=Eigen::Matrix<double,-1,-1>::Zero(nTrunc,nTrunc);
-		//make matrix by looping over all states that aren't traced over
-		int ti,tj;
-		for(int i=0;i<evec.size();i++){
-			for(int j=0;j<evec.size();j++){
-				if( (states[i] & trunc_part) == (states[j] & trunc_part) ){
-					for(ti=0;ti<nTrunc;ti++)
-						if( (states[i] & ~trunc_part) == trunc_states[ti]) break;
-					for(tj=0;tj<nTrunc;tj++)
-						if( (states[j] & ~trunc_part) == trunc_states[tj]) break;
-				
-					rho(ti,tj)+=(evec[i]*conj(evec[j])).real();
-				}
-			}
-		}
-		//diagonalize matrix
-		Eigen::SelfAdjointEigenSolver<Eigen::Matrix<double,-1,-1> > rs(rho);
-		//output sum
-		for(int i=0;i<nTrunc;i++) 
-			if(rs.eigenvalues()(i)>0) out-=rs.eigenvalues()(i)*log(rs.eigenvalues()(i));
-			
-		///if the model has a charge, plot the entanglement spectrum			
-		if(has_charge && periodic){
-			filename.str("");
-			filename<<"spectrum"<<orb;
-			spectout.open(filename.str().c_str());			
-			for(int c=0;c<NPhi;c++){
-				for(int n=0;n<Ne;n++){
-					//sort trunc_states based on their charge
-					rows.clear();
-					for(int j=0;j<nTrunc;j++)
-						if(get_charge(trunc_states[j])==c && count_bits(trunc_states[j])==n) rows.push_back(j);
-					if (rows.size()	== 0) continue;
-	
-					//use the same keys to get block-diagonal rho
-					rhoblock=Eigen::Matrix<double,-1,-1>::Zero(rows.size(),rows.size());
-					for(int j=0;j<rows.size();j++){
-						for(int k=0;k<rows.size();k++){
-							rhoblock(j,k)=rho(rows[j],rows[k]);
-						}
-					}
-	
-					//diagonalize the rho and print the results
-					rs.compute(rhoblock);			
-					for(int j=0;j<rows.size();j++) spectout<<c<<" "<<n<<" "<<rs.eigenvalues()(j)<<endl;
-				}
-			}
-		}
-		spectout.close();	
+		ee_setup(orb,(orb+NPhi/2)%NPhi);
+		rho=Eigen::Matrix<ART,-1,-1>::Zero(trunc_states.size(),trunc_states.size());		
+		ee_compute_rho( evec );
+		out+=ee_eval_rho();
 	}
 	return out/(1.*NPhi);
+}
+
+template<class ART>
+void ManySolver<ART>::ee_setup(int trace_start, int trace_end, int vecsize=-1){
+	bool found;
+	if(vecsize==-1) vecsize=nStates;
+	
+	//compute trunc_part
+	trunc_part=0; //bitwise-AND with this gives just the component in the traced over states
+	for(int i=0;i<NPhi;i++){
+		if ((i>=trace_start && i <trace_end && trace_end>trace_start) || (trace_end<trace_start && (i < trace_end || i >= trace_start) ) )
+			trunc_part=trunc_part | 1<<i;
+	}
+
+	//figure out how many reduced states there are		
+	trunc_states.clear();
+	for(int i=0;i<vecsize;i++){
+		found=false;
+		for(int j=0;j<trunc_states.size();j++)
+			if( (states[i] & ~trunc_part) ==trunc_states[j]) found=true;
+		if(!found) trunc_states.push_back(states[i] & ~trunc_part);
+	}
+}
+
+template<class ART>
+void ManySolver<ART>::ee_compute_rho(const vector<ART> &evec, double coeff=1){
+	//make matrix by looping over all states that aren't traced over
+	int ti,tj;
+	for(int i=0;i<evec.size();i++){
+		for(int j=0;j<evec.size();j++){
+			if( (states[i] & trunc_part) == (states[j] & trunc_part) ){
+				for(ti=0;ti<trunc_states.size();ti++)
+					if( (states[i] & ~trunc_part) == trunc_states[ti]) break;
+				for(tj=0;tj<trunc_states.size();tj++)
+					if( (states[j] & ~trunc_part) == trunc_states[tj]) break;
+			
+				rho(ti,tj)+=coeff*(evec[i]*conj(evec[j]));
+			}
+		}
+	}
+}
+template<class ART>
+double ManySolver<ART>::ee_eval_rho(){
+	double out=0;
+	//diagonalize matrix
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART,-1,-1> > rs(rho);
+	//output sum
+	for(int i=0;i<trunc_states.size();i++) 
+		if(rs.eigenvalues()(i)>0) out-=rs.eigenvalues()(i)*log(rs.eigenvalues()(i));
+	return out;
+}
+template<class ART>
+void ManySolver<ART>::plot_spectrum(string name){			
+///if the model has a charge, plot the entanglement spectrum			
+	Eigen::Matrix<ART,-1,-1> rhoblock;
+	vector<int> rows; 
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART,-1,-1> > rs;
+	stringstream filename;
+	ofstream spectout;
+	if(!has_charge || !periodic){
+		cout<<"tried to plot spectrum, but its not appropriate"<<endl;
+		return;
+	}
+
+	filename<<"spectrum "<<name;
+	spectout.open(filename.str().c_str());			
+
+	for(int c=0;c<NPhi;c++){
+		for(int n=0;n<Ne;n++){
+			//sort trunc_states based on their charge
+			rows.clear();
+			for(int j=0;j<trunc_states.size();j++)
+				if(get_charge(trunc_states[j])==c && count_bits(trunc_states[j])==n) rows.push_back(j);
+			if (rows.size()	== 0) continue;
+
+			//use the same keys to get block-diagonal rho
+			rhoblock=Eigen::Matrix<ART,-1,-1>::Zero(rows.size(),rows.size());
+			for(int j=0;j<rows.size();j++){
+				for(int k=0;k<rows.size();k++){
+					rhoblock(j,k)=rho(rows[j],rows[k]);
+				}
+			}
+
+			//diagonalize the rho and print the results
+			rs.compute(rhoblock);			
+			for(int j=0;j<rows.size();j++) spectout<<c<<" "<<n<<" "<<rs.eigenvalues()(j)<<endl;
+		}
+	}
+	spectout.close();	
 }
 //convert a wavefunction in the truncated-orbitals basis to one in the Landau basis
 template<class ART>
