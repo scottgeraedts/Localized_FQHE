@@ -44,6 +44,10 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	bool arpack=true;
 	int q=(this->NPhi-this->nHigh)/this->Ne;
 	int nconverged;
+	vector < Eigen::Matrix<ART,-1,-1> > rho;
+	Eigen::Matrix<ART,-1,-1> temp;
+	rho.resize(this->NPhi);
+	
 	for(int i=0;i<this->NROD;i++){
 		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
 		this->single.init(i,this->disorder_strength,this->nLow,this->nHigh);
@@ -71,14 +75,17 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 
 			for(int j=0;j<this->NPhi;j++){
 				this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
-				this->rho=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
-				for(int k=0;k<q;k++){
-					eigvec=this->getEV(this->getPos(k));
-					if(this->project) this->basis_convert(eigvec);
-					this->ee_compute_rho(eigvec,1./(1.*q));
+				rho[j]=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
+			}
+			for(int k=0;k<q;k++){
+				eigvec=this->getEV(this->getPos(k));
+				if(this->project) this->basis_convert(eigvec);
+				for(int j=0;j<this->NPhi;j++){
+					this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
+					this->ee_compute_rho(eigvec,rho[j],1./(1.*q));
 				}
-				ee(j)+=this->ee_eval_rho();
 			}//NPhi
+			for(int j=0;j<this->NPhi;j++) ee(j)+=this->ee_eval_rho(rho[j]);
 		}//if arpack
 	}//NROD
 

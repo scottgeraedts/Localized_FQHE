@@ -66,16 +66,19 @@ protected:
 	//stuff to deal with disorder
 	SingleSolver single; //for other geometries, this would need to be promoted to a single-electron parent class
 	
+	//matvecs
 	void explicitMultMv(ART *v, ART *w);
 	void MultMv(ART *v, ART *w);
 	Eigen::Matrix<ART,-1,1> MultEigen(Eigen::Matrix<ART,-1,1>);
 	void MatvecToDense();
 
+	//lookup stuff
 	vector< vector<int> > lookup_table_four,lookup_table_two;
 	int lookup_flipped(int i,int a,int b,int c,int d);
 	int lookup_flipped(int i,int a,int b);
 	void make_lookups();
 	
+	//handy hamiltonian makign stuff
 	void print_eigenstates();
 	int adjust_sign(int a,int b,int state);
 	int adjust_sign(int a,int b, int c, int d, int state);
@@ -83,16 +86,17 @@ protected:
 	int state_to_index(int state);
 	double V_Coulomb(double qx,double qy);
 	
+	//entanglement entropy stuff
 	double entanglement_entropy(const vector<ART> &evec);
-	void ee_setup(int trunc_start, int trunc_end, int vecsize);
-	void ee_compute_rho(const vector<ART> &evec, double coeff);
-	double ee_eval_rho();
+	void ee_setup(int trunc_start, int trunc_end);
+	void ee_compute_rho(const vector<ART> &evec, Eigen::Matrix<ART,-1,-1> &rho2, double coeff);
+	double ee_eval_rho(Eigen::Matrix<ART,-1,-1> &rho2);
 	void plot_spectrum(string name);
 	Eigen::Matrix<ART,-1,-1> rho;
-	vector<int> trunc_states;
+	vector<int> trunc_states, orig_states;
 	int trunc_part;
 	void basis_convert(vector<ART> &evec);
-	void expand(int,ART,int, vector<ART> &new_evec, const vector<int> &orig_states);
+	void expand(int,ART,int, vector<ART> &new_evec);
 
 	//math functions
 	double ClebschGordan(int,int,int);
@@ -200,6 +204,15 @@ void ManySolver<ART>::make_states(){
 	}
 	nStates=j;		 
 	this->setrows(nStates);
+	
+	//this code is just a repeat of make_states, but it makes the untruncated basis
+	if(project){
+		for(int i=0;i<intpow(2,NPhi);i++){
+			if (count_bits(i)==Ne){
+				orig_states.push_back(i);
+			}
+		}
+	}	
 //	cout<<"nStates: "<<nStates<<endl;	
 //	for(int i=0;i<nStates;i++)
 //		cout<<(bitset<9>)states[i]<<endl;
@@ -653,9 +666,12 @@ double ManySolver<ART>::entanglement_entropy(const vector< ART > &evec){
 }
 
 template<class ART>
-void ManySolver<ART>::ee_setup(int trace_start, int trace_end, int vecsize=-1){
+void ManySolver<ART>::ee_setup(int trace_start, int trace_end){
 	bool found;
-	if(vecsize==-1) vecsize=nStates;
+
+	vector<int> *statep;
+	if(project) statep=&orig_states;
+	else statep=&states;
 	
 	//compute trunc_part
 	trunc_part=0; //bitwise-AND with this gives just the component in the traced over states
@@ -666,36 +682,42 @@ void ManySolver<ART>::ee_setup(int trace_start, int trace_end, int vecsize=-1){
 
 	//figure out how many reduced states there are		
 	trunc_states.clear();
-	for(int i=0;i<vecsize;i++){
+	for(int i=0;i<(*statep).size();i++){
 		found=false;
 		for(int j=0;j<trunc_states.size();j++)
-			if( (states[i] & ~trunc_part) ==trunc_states[j]) found=true;
-		if(!found) trunc_states.push_back(states[i] & ~trunc_part);
+			if( ( (*statep)[i] & ~trunc_part) ==trunc_states[j]) found=true;
+		if(!found) trunc_states.push_back( (*statep)[i] & ~trunc_part);
 	}
 }
 
 template<class ART>
-void ManySolver<ART>::ee_compute_rho(const vector<ART> &evec, double coeff=1){
+void ManySolver<ART>::ee_compute_rho(const vector<ART> &evec, Eigen::Matrix<ART,-1,-1> &rho2, double coeff=1){
 	//make matrix by looping over all states that aren't traced over
+	vector<int> *statep;
+	if(project) statep=&orig_states;
+	else statep=&states;
 	int ti,tj;
 	for(int i=0;i<evec.size();i++){
 		for(int j=0;j<evec.size();j++){
-			if( (states[i] & trunc_part) == (states[j] & trunc_part) ){
+			if( ( (*statep)[i] & trunc_part) == ( (*statep)[j] & trunc_part) ){
 				for(ti=0;ti<trunc_states.size();ti++)
-					if( (states[i] & ~trunc_part) == trunc_states[ti]) break;
+					if( ( (*statep)[i] & ~trunc_part) == trunc_states[ti]) break;
 				for(tj=0;tj<trunc_states.size();tj++)
-					if( (states[j] & ~trunc_part) == trunc_states[tj]) break;
-			
-				rho(ti,tj)+=coeff*(evec[i]*conj(evec[j]));
+					if( ( (*statep)[j] & ~trunc_part) == trunc_states[tj]) break;
+				if(ti==trunc_states.size() || tj==trunc_states.size()){
+					cout<<ti<<" "<<tj<<endl;
+					cout<<(bitset<16>)(*statep)[i]<<" "<<(bitset<16>)(*statep)[j]<<" "<<(bitset<16>)trunc_part<<endl;
+				}
+				rho2(ti,tj)+=coeff*(evec[i]*conj(evec[j]));
 			}
 		}
 	}
 }
 template<class ART>
-double ManySolver<ART>::ee_eval_rho(){
+double ManySolver<ART>::ee_eval_rho(Eigen::Matrix<ART,-1,-1> &rho2){
 	double out=0;
 	//diagonalize matrix
-	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART,-1,-1> > rs(rho);
+	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART,-1,-1> > rs(rho2);
 	//output sum
 	for(int i=0;i<trunc_states.size();i++) 
 		if(rs.eigenvalues()(i)>0) out-=rs.eigenvalues()(i)*log(rs.eigenvalues()(i));
@@ -743,17 +765,10 @@ void ManySolver<ART>::plot_spectrum(string name){
 //convert a wavefunction in the truncated-orbitals basis to one in the Landau basis
 template<class ART>
 void ManySolver<ART>::basis_convert(vector<ART> &evec){
-	//this code is just a repeat of make_states, but it makes the untruncated basis
-	vector<int> orig_states;
-	for(int i=0;i<intpow(2,NPhi);i++){
-		if (count_bits(i)==Ne){
-			orig_states.push_back(i);
-		}
-	}
 	vector<ART> new_evec(orig_states.size(),0);
 
 	for(int i=0;i<nStates;i++){
-		expand(states[i],evec[i],0,new_evec,orig_states);
+		expand(states[i],evec[i],0,new_evec);
 	}
 	evec=new_evec;
 	
@@ -762,14 +777,12 @@ void ManySolver<ART>::basis_convert(vector<ART> &evec){
 //it finds the first set bit in a state, and expands that bit in the old basis
 //then it chops off that part of the bit and recurses
 template<class ART>
-void ManySolver<ART>::expand(int state, ART coeff, int orig_state, vector<ART> &new_evec, const vector<int> &orig_states){
+void ManySolver<ART>::expand(int state, ART coeff, int orig_state, vector<ART> &new_evec){
 	vector<int>::const_iterator low;
 	int largest_bit=-1;
-	int orig_state2;
 	ART temp;
-	//cout<<(bitset<6>)orig_state<<" "<<(bitset<6>)state<<" "<<coeff<<endl;
 	//find largest set bit
-	for(int i=NPhi;i>-1;i--){
+	for(int i=NPhi;i>-1;i--){//speedup idea: start at previously found largest bit
 		if(state & 1<<i) {
 			largest_bit=i;
 			break;
@@ -791,7 +804,6 @@ void ManySolver<ART>::expand(int state, ART coeff, int orig_state, vector<ART> &
 	else{
 		for(int i=0;i<NPhi;i++){
 			if(orig_state & 1<<i) continue; //if that bit is already set, then this state doesn't contribute and we are done
-			else orig_state2=orig_state | 1<<i;
 			
 			//to get the sign right, remember that we are expanding bits from largest to smallest. So if the expanded bit is not the smallest, we need to do 
 			//(-1)^(number of smaller bits)
@@ -799,7 +811,7 @@ void ManySolver<ART>::expand(int state, ART coeff, int orig_state, vector<ART> &
 			else temp=(ART)1;
 			temp*=conj(single.evec(largest_bit,i));
 	//		cout<<i<<" "<<largest_bit<<" "<<temp<<endl;
-			expand(state%(1<<largest_bit),coeff*temp,orig_state2,new_evec,orig_states);
+			expand(state%(1<<largest_bit),coeff*temp,orig_state| 1<<i,new_evec);
 		}
 	}
 }
