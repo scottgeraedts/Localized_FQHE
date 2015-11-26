@@ -41,10 +41,24 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 
 	double se=self_energy();
 	Eigen::VectorXd ee;
-	int stop=15;	
 	Eigen::VectorXd sum;
-	vector<complex<double> > eigvec;
+	int stop=15;	
+	vector<int> js;
 	bool arpack=false;
+	if(!arpack){
+		js.push_back(0);
+		js.push_back(1);
+		js.push_back(2);
+		for(int j=3;j<this->nStates;j+=10) js.push_back(j);
+
+		ee=Eigen::VectorXd::Zero(js.size());
+		sum=Eigen::VectorXd::Zero(this->nStates);
+	}else{
+		ee=Eigen::VectorXd::Zero(this->NPhi);
+		sum=Eigen::VectorXd::Zero(stop);
+	}	
+	
+	vector<complex<double> > eigvec;
 	int q=(this->NPhi-this->nHigh)/this->Ne;
 	int nconverged;
 	vector < Eigen::Matrix<ART,-1,-1> > rho;
@@ -55,21 +69,13 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
 		this->single.init(i,this->disorder_strength,this->nLow,this->nHigh);
 		this->make_Hnn();
-		if(this->nStates<=stop) stop=this->nStates-1;
 	
 		if(!arpack){
-			vector<int> js;
-			js.push_back(0);
-			js.push_back(1);
-			js.push_back(2);
-			for(int j=3;j<this->nStates;j+=10) js.push_back(j);
-
-			sum=Eigen::VectorXd::Zero(this->nStates);		
 			this->es.compute(this->Hnn);
-			sum=this->es.eigenvalues();
-			sum=sum/(1.*this->Ne);
-			sum=sum.array()+se;
-			ee=Eigen::VectorXd::Zero(js.size());
+			
+			Eigen::VectorXd tempE=this->es.eigenvalues();
+			tempE=tempE/(1.*this->Ne);
+			sum=sum.array()+tempE.array()+se;
 			for(int j=0;j<js.size();j++){
 				for(int cut=0;cut<this->NPhi;cut++){
 					this->ee_setup(cut,(cut+this->NPhi/2)%this->NPhi);
@@ -83,9 +89,8 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
 
+			if(this->nStates<=stop) stop=this->nStates-1;
 			nconverged=this->eigenvalues(stop,q,1.);
-			sum=Eigen::VectorXd::Zero(nconverged);
-			ee=Eigen::VectorXd::Zero(this->NPhi);
 //			ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
 	//		dprob.FindEigenvalues();
 //			dprob.FindEigenvectors();

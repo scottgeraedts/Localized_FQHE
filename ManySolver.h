@@ -159,6 +159,7 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(){
 	//you wouldn't believe how much faster this makes the code
 	NPhi2=NPhi*NPhi;
 	NPhi3=NPhi*NPhi2;
+	make_states();
 }
 
 template<class ART> template<class T>
@@ -220,7 +221,6 @@ void ManySolver<ART>::make_states(){
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
 	if(cache) make_cache();
-	make_states();
 	Hnn=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 	int j;
 	ART temp;
