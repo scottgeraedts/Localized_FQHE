@@ -58,19 +58,27 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		if(this->nStates<=stop) stop=this->nStates-1;
 	
 		if(!arpack){
+			vector<int> js;
+			js.push_back(0);
+			js.push_back(1);
+			js.push_back(2);
+			for(int j=3;j<this->nStates;j+=10) js.push_back(j);
+
 			sum=Eigen::VectorXd::Zero(this->nStates);		
 			this->es.compute(this->Hnn);
 			sum=this->es.eigenvalues();
 			sum=sum/(1.*this->Ne);
 			sum=sum.array()+se;
-			ee=Eigen::VectorXd::Zero(this->nStates/10);
-			for(int j=0;j<this->nStates;j+=10){
-				this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
-				temp=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
-				eigvec=vector<complex<double> >(this->nStates,0);
-				for(int k=0;k<this->nStates;k++) eigvec[k]=track_evecs(j,k);
-				this->ee_compute_rho(eigvec,temp,1.);
-				ee(j)+=this->ee_eval_rho(temp);
+			ee=Eigen::VectorXd::Zero(js.size());
+			for(int j=0;j<js.size();j++){
+				for(int cut=0;cut<this->NPhi;cut++){
+					this->ee_setup(cut,(cut+this->NPhi/2)%this->NPhi);
+					temp=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
+					eigvec=vector<complex<double> >(this->nStates,0);
+					for(int k=0;k<this->nStates;k++) eigvec[k]=track_evecs(js[j],k);
+					this->ee_compute_rho(eigvec,temp,1.);
+					ee(j)+=this->ee_eval_rho(temp);
+				}
 			}
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
