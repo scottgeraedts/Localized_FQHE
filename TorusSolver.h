@@ -25,9 +25,12 @@ private:
 	ART four_body_haldane(int a,int b, int c, int d);
 	double Hermite(double x,int n);
 	int get_charge(int state);//could make virtual
+	ART track_evecs(int j, int k);
 
 };
 
+template<class ART>
+ART TorusSolver<ART>::track_evecs(int j, int k){ return this->es.eigenvectors().col(j)(k);}
 template <class ART>
 TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	//stuff unique to the torus
@@ -37,11 +40,11 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	this->periodic=1;
 
 	double se=self_energy();
-	Eigen::VectorXd ee=Eigen::VectorXd::Zero(this->NPhi);
+	Eigen::VectorXd ee;
 	int stop=15;	
-	Eigen::VectorXd sum=Eigen::VectorXd::Zero(stop);
+	Eigen::VectorXd sum;
 	vector<complex<double> > eigvec;
-	bool arpack=true;
+	bool arpack=false;
 	int q=(this->NPhi-this->nHigh)/this->Ne;
 	int nconverged;
 	vector < Eigen::Matrix<ART,-1,-1> > rho;
@@ -55,16 +58,26 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		if(this->nStates<=stop) stop=this->nStates-1;
 	
 		if(!arpack){
+			sum=Eigen::VectorXd::Zero(this->nStates);		
 			this->es.compute(this->Hnn);
 			sum=this->es.eigenvalues();
 			sum=sum/(1.*this->Ne);
 			sum=sum.array()+se;
-			eigvec=vector<complex<double> >(this->nStates,0);
-			for(int j=0;j<this->nStates;j++) eigvec[j]=this->es.eigenvectors().col(0)(j);
+			ee=Eigen::VectorXd::Zero(this->nStates/10);
+			for(int j=0;j<this->nStates;j+=10){
+				this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
+				temp=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
+				eigvec=vector<complex<double> >(this->nStates,0);
+				for(int k=0;k<this->nStates;k++) eigvec[k]=track_evecs(j,k);
+				this->ee_compute_rho(eigvec,temp,1.);
+				ee(j)+=this->ee_eval_rho(temp);
+			}
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
 
-			nconverged=this->eigenvalues(stop,q);
+			nconverged=this->eigenvalues(stop,q,1.);
+			sum=Eigen::VectorXd::Zero(nconverged);
+			ee=Eigen::VectorXd::Zero(this->NPhi);
 //			ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
 	//		dprob.FindEigenvalues();
 //			dprob.FindEigenvectors();
@@ -93,7 +106,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	ofstream eout;
 	sum/=(1.*this->NROD);
 	eout.open("energies");
-	for(int i=0;i<stop;i++) eout<<sum(i)<<" ";
+	for(int i=0;i<sum.size();i++) eout<<sum(i)<<" ";
 	eout<<endl;
 	eout.close();
 
@@ -102,7 +115,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	ee/=(1.*this->NROD);
 	sout.open("entropy");
 	sout<<ee.sum()/(1.*this->NPhi)<<" ";
-	for(int i=0;i<this->NPhi;i++) sout<<ee(i)<<" ";
+	for(int i=0;i<ee.size();i++) sout<<ee(i)<<" ";
 	sout<<endl;
 	sout.close();
 	

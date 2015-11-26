@@ -5,7 +5,7 @@ this can do all kinds of things to a matrix, all it needs is a matvec that inher
 #ifndef MATPROD_H
 #define MATPROD_H
 
-#include "lapacke.h"
+//#include "lapacke.h"
 #include <iostream>
 #include <Eigen/SparseCholesky>
 #include <Eigen/SparseLU>
@@ -52,10 +52,9 @@ class MatrixWithProduct {
 
   void MultInvSparse(ART*v, ART* w);
   void makeSparse();
-  void sparseLU();
   void sparseSolve();
 
-  int eigenvalues(int k, int q);
+  int eigenvalues(int k, int q, double E);
   double calcVarEigen(Eigen::Matrix<ART, Eigen::Dynamic, 1> v);
     
   ~MatrixWithProduct();
@@ -131,7 +130,7 @@ void MatrixWithProduct<ART>::printDense(){
 		cout<<endl;
 	}
 }
-//compute the dense LU decomposition
+/*//compute the dense LU decomposition
 template<class ART>
 void MatrixWithProduct<ART>::denseLU(){
 	ipiv=new int[n];
@@ -158,7 +157,7 @@ void MatrixWithProduct<ART>::denseSolve(){
 	for(int i=0;i<n;i++) cout<<w[i]<<endl;
 	delete [] w;
 }
-
+*/
 template<class ART>
 void MatrixWithProduct<ART>::makeSparse(){
 	sparse.resize(n,n);
@@ -176,16 +175,16 @@ void MatrixWithProduct<ART>::makeSparse(){
 		MultMv(v,w);
 		for(int j=0; j<n; j++){
 		//	if (w[j]!=0) temp=Eigen::Triplet<ART>(j,i,w[j]);
-			if (w[j]!=0) coeff.push_back( Eigen::Triplet<ART>(j,i,w[j]) );
+			if (abs(w[j])>1e-16) coeff.push_back( Eigen::Triplet<ART>(j,i,w[j]) );
 		}
 	}
 	sparse.setFromTriplets(coeff.begin(), coeff.end() );
 	delete [] v;
 	delete [] w;
 	//cout<<sparse<<endl;
-}
-template <class ART>
-void  MatrixWithProduct<ART>::sparseLU(){
+//}
+//template <class ART>
+//void  MatrixWithProduct<ART>::sparseLU(){
 	sparseLU_solver.compute(sparse);
 	if(sparseLU_solver.info()!=0) {
 	  // decomposition failed
@@ -227,22 +226,37 @@ double MatrixWithProduct<ART>::calcVarEigen(Eigen::Matrix<ART, Eigen::Dynamic, 1
 }
 
 template <class ART> 
-int MatrixWithProduct<ART>::eigenvalues(int stop, int q=1){
-	ARCompStdEig<double, MatrixWithProduct<ART> >  dprob(ncols(), stop, this, &MatrixWithProduct<ART>::MultMv,"SR",(int)0, 1e-10,1e6);
-	dprob.FindEigenvectors();
-
-	eigvals=vector<double>(dprob.ConvergedEigenvalues(),0);
+int MatrixWithProduct<ART>::eigenvalues(int stop, int q=1, double E=-100){
 	vector<ART>temp(n,0);
-	eigvecs=vector<vector<ART> >(dprob.ConvergedEigenvalues(),temp);
-	for(int k=0;k<dprob.ConvergedEigenvalues();k++){
-		eigvals[k]=dprob.Eigenvalue(k).real();
-		eigvecs[k]=*(dprob.StlEigenvector(k));
-	}
+	int Nconverged;
+	if (E==-100){
+		ARCompStdEig<double, MatrixWithProduct<ART> >  dprob(ncols(), stop, this, &MatrixWithProduct<ART>::MultMv,"SR",(int)0, 1e-10,1e6);
+		dprob.FindEigenvectors();
+		Nconverged=dprob.ConvergedEigenvalues();
 
+		eigvals=vector<double>(Nconverged,0);
+		eigvecs=vector<vector<ART> >(dprob.ConvergedEigenvalues(),temp);
+		for(int k=0;k<dprob.ConvergedEigenvalues();k++){
+			eigvals[k]=dprob.Eigenvalue(k).real();
+			eigvecs[k]=*(dprob.StlEigenvector(k));
+		}
+	}else{
+		makeSparse();
+		ARCompStdEig<double, MatrixWithProduct<ART> >  dprob(ncols(), stop, this, &MatrixWithProduct<ART>::MultMv,E,"SR",(int)0, 1e-10,1e6);
+		dprob.FindEigenvalues();
+
+		eigvals=vector<double>(dprob.ConvergedEigenvalues(),0);
+		eigvecs=vector<vector<ART> >(dprob.ConvergedEigenvalues(),temp);
+		for(int k=0;k<dprob.ConvergedEigenvalues();k++){
+			eigvals[k]=1./dprob.Eigenvalue(k).real()+E;
+			eigvecs[k]=*(dprob.StlEigenvector(k));
+		}
+		Nconverged=dprob.ConvergedEigenvalues();
+	}
 		
 	//get the positions of the q smallest  eigenvectors
-	lowlevpos=vector<int>(q,dprob.ConvergedEigenvalues()-1 );
-	for(int k=0;k<dprob.ConvergedEigenvalues();k++){
+	lowlevpos=vector<int>(q,Nconverged-1 );
+	for(int k=0;k<Nconverged;k++){
 		for(int j1=0;j1<q;j1++){
 			if(eigvals[k]<eigvals[lowlevpos[j1]]){
 				for(int j2=q-1;j2>j1;j2--) lowlevpos[j2]=lowlevpos[j2-1];
@@ -252,8 +266,8 @@ int MatrixWithProduct<ART>::eigenvalues(int stop, int q=1){
 		}
 	}
 	sort(eigvals.begin(),eigvals.end());
-	return dprob.ConvergedEigenvalues();
-//	for(int i=0;i<dprob.ConvergedEigenvalues();i++) cout<<dprob.Eigenvalue(i)<<endl;
+	return Nconverged;
+//	for(int i=0;i<Nconverged;i++) cout<<dprob.Eigenvalue(i)<<endl;
 	
 }	
 //destructor, delete the dense matrices
