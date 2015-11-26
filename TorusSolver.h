@@ -41,7 +41,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	Eigen::VectorXd sum;
 	int stop=15;	
 	vector<int> js;
-	bool arpack=false;
+	bool arpack=true;
 	if(!arpack){
 		js.push_back(0);
 		js.push_back(1);
@@ -87,7 +87,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		//****A call to ARPACK++. The fastest of all methods		
 
 			if(this->nStates<=stop) stop=this->nStates-1;
-			nconverged=this->eigenvalues(stop,10,1.);
+			nconverged=this->eigenvalues(stop,10);
 //			ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
 	//		dprob.FindEigenvalues();
 //			dprob.FindEigenvectors();

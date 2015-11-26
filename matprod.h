@@ -11,6 +11,7 @@ this can do all kinds of things to a matrix, all it needs is a matvec that inher
 #include <Eigen/SparseLU>
 #include <Eigen/Core>
 #include "arscomp.h"
+#include <functional>
 
 using namespace std;
 
@@ -78,7 +79,8 @@ class MatrixWithProduct {
   } // Constructor.
   
   vector<int> sort_indexes(const vector<double> &v);
-
+	bool compy(int,int);
+	
 }; // MatrixWithProduct
 
 template<class ART>
@@ -244,7 +246,7 @@ int MatrixWithProduct<ART>::eigenvalues(int stop, int q=1, double E=-100){
 	}else{
 		makeSparse();
 		ARCompStdEig<double, MatrixWithProduct<ART> >  dprob(ncols(), stop, this, &MatrixWithProduct<ART>::MultMv,E,"SR",(int)0, 1e-10,1e6);
-		dprob.FindEigenvalues();
+		dprob.FindEigenvectors();
 
 		eigvals=vector<double>(dprob.ConvergedEigenvalues(),0);
 		eigvecs=vector<vector<ART> >(dprob.ConvergedEigenvalues(),temp);
@@ -254,9 +256,7 @@ int MatrixWithProduct<ART>::eigenvalues(int stop, int q=1, double E=-100){
 		}
 		Nconverged=dprob.ConvergedEigenvalues();
 	}
-	
 	lowlevpos=sort_indexes(eigvals);	
-	
 	//get the positions of the q smallest  eigenvectors
 //	lowlevpos=vector<int>(q,Nconverged-1 );
 //	for(int k=0;k<Nconverged;k++){
@@ -280,9 +280,17 @@ vector<int> MatrixWithProduct<ART>::sort_indexes(const vector<double> &v) {
   for (int i = 0; i != idx.size(); ++i) idx[i] = i;
 
   // sort indexes based on comparing values in v
-  sort(idx.begin(), idx.end(),
-       [&v](int i1, int i2) {return v[i1] < v[i2];});
-
+	//I can't use std::sort because c++ is super gay
+	int temp;
+	for(int j=idx.size();j>0;j--){
+		for(int i=0;i<j-1;i++){
+			if(v[idx[i]]>v[idx[i+1]]){
+				 temp=idx[i];
+				 idx[i]=idx[i+1];
+				 idx[i+1]=temp;
+			}
+		}
+	}
   return idx;
 }	
 //destructor, delete the dense matrices
