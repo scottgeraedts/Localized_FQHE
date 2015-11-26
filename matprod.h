@@ -35,9 +35,8 @@ class MatrixWithProduct {
   int ncols() { return n; }
 	void setrows(int x){ m=x; n=x;}
 	
-	double getE(int a){return eigvals[a];}
-	vector<ART> getEV(int a){return eigvecs[a];}
-	int getPos(int a){return lowlevpos[a];}
+	double getE(int a){return eigvals[lowlevpos[a]];}
+	vector<ART> getEV(int a){return eigvecs[lowlevpos[a]];}
 
   virtual void MultMv(ART* v, ART* w) = 0;
   virtual Eigen::Matrix<ART, Eigen::Dynamic, 1> MultEigen(Eigen::Matrix<ART, Eigen::Dynamic, 1>) = 0;//used so we can communicate with my lanczos, which is based on eigen
@@ -77,6 +76,8 @@ class MatrixWithProduct {
     dense=NULL;
     ipiv=NULL;
   } // Constructor.
+  
+  vector<int> sort_indexes(const vector<double> &v);
 
 }; // MatrixWithProduct
 
@@ -253,22 +254,36 @@ int MatrixWithProduct<ART>::eigenvalues(int stop, int q=1, double E=-100){
 		}
 		Nconverged=dprob.ConvergedEigenvalues();
 	}
-		
+	
+	lowlevpos=sort_indexes(eigvals);	
+	
 	//get the positions of the q smallest  eigenvectors
-	lowlevpos=vector<int>(q,Nconverged-1 );
-	for(int k=0;k<Nconverged;k++){
-		for(int j1=0;j1<q;j1++){
-			if(eigvals[k]<eigvals[lowlevpos[j1]]){
-				for(int j2=q-1;j2>j1;j2--) lowlevpos[j2]=lowlevpos[j2-1];
-				lowlevpos[j1]=k;
-				break;
-			}
-		}
-	}
-	sort(eigvals.begin(),eigvals.end());
+//	lowlevpos=vector<int>(q,Nconverged-1 );
+//	for(int k=0;k<Nconverged;k++){
+//		for(int j1=0;j1<q;j1++){
+//			if(eigvals[k]<eigvals[lowlevpos[j1]]){
+//				for(int j2=q-1;j2>j1;j2--) lowlevpos[j2]=lowlevpos[j2-1];
+//				lowlevpos[j1]=k;
+//				break;
+//			}
+//		}
+//	}
 	return Nconverged;
 //	for(int i=0;i<Nconverged;i++) cout<<dprob.Eigenvalue(i)<<endl;
 	
+}
+template <class ART>
+vector<int> MatrixWithProduct<ART>::sort_indexes(const vector<double> &v) {
+
+  // initialize original index locations
+  vector<int> idx(v.size());
+  for (int i = 0; i != idx.size(); ++i) idx[i] = i;
+
+  // sort indexes based on comparing values in v
+  sort(idx.begin(), idx.end(),
+       [&v](int i1, int i2) {return v[i1] < v[i2];});
+
+  return idx;
 }	
 //destructor, delete the dense matrices
 template<class ART>

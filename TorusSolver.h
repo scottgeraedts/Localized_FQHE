@@ -25,12 +25,9 @@ private:
 	ART four_body_haldane(int a,int b, int c, int d);
 	double Hermite(double x,int n);
 	int get_charge(int state);//could make virtual
-	ART track_evecs(int j, int k);
 
 };
 
-template<class ART>
-ART TorusSolver<ART>::track_evecs(int j, int k){ return this->es.eigenvectors().col(j)(k);}
 template <class ART>
 TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	//stuff unique to the torus
@@ -54,12 +51,12 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		ee=Eigen::VectorXd::Zero(js.size());
 		sum=Eigen::VectorXd::Zero(this->nStates);
 	}else{
-		ee=Eigen::VectorXd::Zero(this->NPhi);
+		ee=Eigen::VectorXd::Zero(stop);
 		sum=Eigen::VectorXd::Zero(stop);
 	}	
 	
 	vector<complex<double> > eigvec;
-	int q=(this->NPhi-this->nHigh)/this->Ne;
+	int q=10;//(this->NPhi-this->nHigh)/this->Ne;
 	int nconverged;
 	vector < Eigen::Matrix<ART,-1,-1> > rho;
 	Eigen::Matrix<ART,-1,-1> temp;
@@ -77,41 +74,51 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 			tempE=tempE/(1.*this->Ne);
 			sum=sum.array()+tempE.array()+se;
 			for(int j=0;j<js.size();j++){
+				eigvec=vector<complex<double> >(this->nStates,0);
+				for(int k=0;k<this->nStates;k++) eigvec[k]=this->es.eigenvectors().col(js[j])(k);
 				for(int cut=0;cut<this->NPhi;cut++){
 					this->ee_setup(cut,(cut+this->NPhi/2)%this->NPhi);
 					temp=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
-					eigvec=vector<complex<double> >(this->nStates,0);
-					for(int k=0;k<this->nStates;k++) eigvec[k]=track_evecs(js[j],k);
 					this->ee_compute_rho(eigvec,temp,1.);
-					ee(j)+=this->ee_eval_rho(temp);
+					ee(j)+=this->ee_eval_rho(temp)/(1.*this->NPhi);
 				}
 			}
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
 
 			if(this->nStates<=stop) stop=this->nStates-1;
-			nconverged=this->eigenvalues(stop,q,1.);
+			nconverged=this->eigenvalues(stop,10,1.);
 //			ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
 	//		dprob.FindEigenvalues();
 //			dprob.FindEigenvectors();
 		
 			for(int k=0;k<nconverged;k++) sum(k)+=this->getE(k)/(1.*this->Ne)+se;
-	//		for(int i=0;i<this->dprob.ConvergedEigenvalues();i++) cout<<eigvals[i]/(1.*this->Ne)+se<<" ";
-	//		cout<<endl;
 
-			for(int j=0;j<this->NPhi;j++){
-				this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
-				rho[j]=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
-			}
-			for(int k=0;k<q;k++){
-				eigvec=this->getEV(this->getPos(k));
-				if(this->project) this->basis_convert(eigvec);
+			for(int k=0;k<stop;k++){
+				eigvec=this->getEV(k);
 				for(int j=0;j<this->NPhi;j++){
 					this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
-					this->ee_compute_rho(eigvec,rho[j],1./(1.*q));
+					temp=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
+					this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
+					this->ee_compute_rho(eigvec,temp,1./(1.*q));
+					ee(k)+=this->ee_eval_rho(temp)/(1.*this->NPhi);
 				}
-			}//NPhi
-			for(int j=0;j<this->NPhi;j++) ee(j)+=this->ee_eval_rho(rho[j]);
+			}	
+//***get EE where density matrix is averaged between levels
+////			for(int j=0;j<this->NPhi;j++){
+////				this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
+////				rho[j]=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
+////			}
+//			for(int k=0;k<q;k++){
+//				eigvec=this->getEV(this->getPos(k));
+//				if(this->project) this->basis_convert(eigvec);
+//				for(int j=0;j<this->NPhi;j++){
+//					this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
+//					this->ee_compute_rho(eigvec,rho[j],1./(1.*q));
+//				}
+//			}//NPhi
+//			for(int j=0;j<this->NPhi;j++) ee(j)+=this->ee_eval_rho(rho[j]);
+/////****done 
 		}//if arpack
 	}//NROD
 
