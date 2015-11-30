@@ -122,7 +122,10 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		transform(DOS.begin(), DOS.end(), DOS.begin(),bind1st(multiplies<double>(),1/(1.*this->NROD) ) );	
 	//	for(int i=0;i<rho.size();i++) cout<<rho[i]<<endl;
 		for(int r=0;r<this->NROD;r++) rtot+=level_spacings(energies[r],DOS,energy_grid)/(1.*this->NROD);
-		cout<<rtot<<endl;
+		ofstream rfile;
+		rfile.open("r");
+		rfile<<rtot<<endl;
+		rfile.close();
 	}
 	
 	//write energies
