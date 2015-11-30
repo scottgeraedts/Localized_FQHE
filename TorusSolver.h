@@ -42,6 +42,15 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	int stop=15;	
 	vector<int> js;
 	bool arpack=false;
+	//stuff for density of states calculation
+	double startE=-2, endE=8, dE=0.01;
+	int ngrid=floor((endE-startE)/dE);
+	vector<double> energy_grid(ngrid,0);
+	for(int i=0;i<ngrid;i++) energy_grid[i]=startE+i*dE;
+	vector<double> DOS(ngrid,0);
+	vector<double> temp(this->nStates,0);
+	vector< vector<double> > energies(this->NROD,temp);
+	
 	if(!arpack){
 		js.push_back(0);
 		js.push_back(1);
@@ -50,6 +59,9 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 
 		ee=Eigen::VectorXd::Zero(js.size());
 		sum=Eigen::VectorXd::Zero(this->nStates);
+
+
+
 	}else{
 		ee=Eigen::VectorXd::Zero(stop);
 		sum=Eigen::VectorXd::Zero(stop);
@@ -58,9 +70,6 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	vector<complex<double> > eigvec;
 	int q=(this->NPhi-this->nHigh)/this->Ne;
 	int nconverged;
-	vector < Eigen::Matrix<ART,-1,-1> > rho;
-	Eigen::Matrix<ART,-1,-1> temp;
-	rho.resize(this->NPhi);
 	
 	for(int i=0;i<this->NROD;i++){
 		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
@@ -74,6 +83,10 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 			for(int j=0;j<js.size();j++){
 				ee(j)+=this->entanglement_entropy(this->getEV(j),this->states);
 			}
+			//average the density of states
+			density_of_states(this->eigvals,DOS,energy_grid);	
+			energies[i]=this->eigvals; //annoyingly, need to save all the eigenvalues for later
+			
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
 
@@ -104,6 +117,14 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		}//if arpack
 	}//NROD
 
+	if(!arpack){ //level spacings
+		double rtot=0.;
+		transform(DOS.begin(), DOS.end(), DOS.begin(),bind1st(multiplies<double>(),1/(1.*this->NROD) ) );	
+	//	for(int i=0;i<rho.size();i++) cout<<rho[i]<<endl;
+		for(int r=0;r<this->NROD;r++) rtot+=level_spacings(energies[r],DOS,energy_grid)/(1.*this->NROD);
+		cout<<rtot<<endl;
+	}
+	
 	//write energies
 	ofstream eout;
 	sum/=(1.*this->NROD);
