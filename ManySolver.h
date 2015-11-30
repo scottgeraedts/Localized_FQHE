@@ -12,19 +12,21 @@
 #include "math.h"
 #include <ctime>
 #include "SingleSolver.h"
+#include "wavefunction.h"
+#include "utils.h"
 #include <string>
 #include "matprod.h"
 extern "C"{
 #include "cblas.h"
 }
-#include "arscomp.h"
+//#include "arscomp.h"
 
 //will use std::bitset library to store bits, which needs to know the number of bits at compile time
 //making this a bit too big is probably fine, some required values
 using namespace std;
 
 template <class ART>
-class ManySolver:public MatrixWithProduct<ART>{
+class ManySolver:public MatrixWithProduct<ART>, public Wavefunction<ART>{
 public:
 	ManySolver();
 	void print_H();
@@ -42,8 +44,8 @@ protected:
 	string outfilename;
 
 	vector<int > states;
-	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> Hnn;//ManySolver in Landau basis
-	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic> > es;
+//	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> Hnn;//ManySolver in Landau basis
+//	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic> > es;
 	
 	virtual ART two_body(int a,int b) =0;//could make virtual
 	virtual ART four_body(int a,int b,int c,int d) =0;//could make virtual
@@ -86,32 +88,18 @@ protected:
 	int state_to_index(int state);
 	double V_Coulomb(double qx,double qy);
 	
-	//entanglement entropy stuff
-	double entanglement_entropy(const vector<ART> &evec);
-	void ee_setup(int trunc_start, int trunc_end);
-	void ee_compute_rho(const vector<ART> &evec, Eigen::Matrix<ART,-1,-1> &rho2, double coeff);
-	double ee_eval_rho(Eigen::Matrix<ART,-1,-1> &rho2);
+	//converting between truncated and original basis
 	void plot_spectrum(string name);
-	Eigen::Matrix<ART,-1,-1> rho;
-	vector<int> trunc_states, orig_states;
-	int trunc_part;
+	vector<int> orig_states;
 	void basis_convert(vector<ART> &evec);
 	void expand(int,ART,int, vector<ART> &new_evec);
-
-	//math functions
-	double ClebschGordan(int,int,int);
-	int count_bits(int);
-	long int comb(int,int);
-	double factorial(int,int);
-	double factorial(int);
-	int intpow(int,int);
 
 };
 
 ///**************DEFINITIONS HERE************///
 
 template<class ART>
-ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(){
+ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
 	//read stuff for this run from the parameters file
 	ifstream infile;
 	infile.open("params");
@@ -132,6 +120,8 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(){
 	}
 
 	else cout << "Unable to open file"; 	
+	
+	this->init_wavefunction(NPhi);
 	
 	cache=1;
 	//set flags and do some simple sanity checks
@@ -221,7 +211,7 @@ void ManySolver<ART>::make_states(){
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
 	if(cache) make_cache();
-	Hnn=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
+	this->EigenDense=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 	int j;
 	ART temp;
 	for(signed int a=0;a<NPhi;a++){
@@ -234,18 +224,13 @@ void ManySolver<ART>::make_Hnn(){
 				for(int i=0;i<(signed)nStates;i++){
 					if ((states[i] & 1<<a) && (b==a || (!( states[i] & 1<<b) && a>=nLow && a<NPhi-nHigh && b>=nLow && b<NPhi-nHigh) ) ){
 						j=lookup_flipped(i,a,b);
-						Hnn(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
+						this->EigenDense(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
 					}
 				}
 			}
 		}
 
 		for(signed int b=a+1;b<NPhi;b++){
-//			if (b>a){
-//				temp=get_interaction(a,b);
-//				for(int i=0;i<nStates;i++)
-//					if (states[i].test(a) && states[i].test(b)) Hnn(i,i)+=temp;
-//			}
 						
 			for(int c=0;c<NPhi;c++){
 				for(int d=0;d<c;d++){
@@ -261,7 +246,7 @@ void ManySolver<ART>::make_Hnn(){
 						 ( (b<NPhi-nHigh && b>=nLow) || b==c ||b==d)  )  {
 				//	cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<i<<" "<<endl;
 							j=lookup_flipped(i,a,b,c,d);
-							Hnn(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
+							this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}
 					}
 				}//d	
@@ -603,165 +588,18 @@ void ManySolver<ART>::MultMv(ART * v, ART * w){
 	for(int i=0;i<nStates;i++) w[i]=0;
 	for(int i=0;i<nStates;i++){
 		for(int j=0;j<nStates;j++)
-			w[i]+=v[j]*Hnn(i,j);
+			w[i]+=v[j]*-this->EigenDense(i,j);
 	}	
 		
 //	double alpha=1., beta=0.;
-//	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
+//	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, this->EigenDense.data(), nStates, v, 1, &beta, w, 1);
 }
 
 template<class ART>
 Eigen::Matrix<ART,-1,1> ManySolver<ART>::MultEigen(Eigen::Matrix<ART,-1,1> invec){
-	return Hnn*invec;
-}
-//turn the matvec into a dense matrix
-template<class ART>
-void ManySolver<ART>::MatvecToDense(){
-	ART *dense=new ART[nStates*nStates];
-	ART *v=new ART[nStates];
-	ART *w=new ART[nStates];
-	for(int i=0;i<nStates;i++){
-		for(int j=0; j<nStates; j++){
-			if(i==j || j==0) v[j]=1;
-			else v[j]=0;
-			w[j]=1;
-		}
-		Hnn_matvec(v,w);
-		for(int j=0; j<nStates; j++){
-			dense[i+j*nStates]=w[j];
-			cout<<w[j]<<" ";
-		}
-		cout<<endl;
-	}
-	delete [] v;
-	delete [] w;
-	delete [] dense;
+	return this->EigenDense*invec;
 }
 
-template<class ART>
-void ManySolver<ART>::print_H(){
-	ofstream Hout;
-	Hout.open("Hout");
-	Hout<<Ne<<" "<<NPhi<<" "<<nStates<<endl;
-	for(int i=0;i<nStates;i++){
-		for(int j=0;j<nStates;j++){
-			if ( abs(Hnn(i,j)) > 0.00000000001) Hout<<setprecision(12)<<i<<" "<<j<<"  "<<Hnn(i,j)<<endl;
-		}
-	}
-	Hout.close();
-}		
-
-/////********ENTANGLEMENT ENTROPY RELATED FUNCTIONS*************////
-//a wrapper to calculate entanglement entropy in one shot
-template<class ART>
-double ManySolver<ART>::entanglement_entropy(const vector< ART > &evec){
-	double out=0;
-	for(int orb=0;orb<NPhi;orb++){
-		ee_setup(orb,(orb+NPhi/2)%NPhi);
-		rho=Eigen::Matrix<ART,-1,-1>::Zero(trunc_states.size(),trunc_states.size());		
-		ee_compute_rho( evec );
-		out+=ee_eval_rho();
-	}
-	return out/(1.*NPhi);
-}
-
-template<class ART>
-void ManySolver<ART>::ee_setup(int trace_start, int trace_end){
-	bool found;
-
-	vector<int> *statep;
-	if(project) statep=&orig_states;
-	else statep=&states;
-	
-	//compute trunc_part
-	trunc_part=0; //bitwise-AND with this gives just the component in the traced over states
-	for(int i=0;i<NPhi;i++){
-		if ((i>=trace_start && i <trace_end && trace_end>trace_start) || (trace_end<trace_start && (i < trace_end || i >= trace_start) ) )
-			trunc_part=trunc_part | 1<<i;
-	}
-
-	//figure out how many reduced states there are		
-	trunc_states.clear();
-	for(int i=0;i<(*statep).size();i++){
-		found=false;
-		for(int j=0;j<trunc_states.size();j++)
-			if( ( (*statep)[i] & ~trunc_part) ==trunc_states[j]) found=true;
-		if(!found) trunc_states.push_back( (*statep)[i] & ~trunc_part);
-	}
-}
-
-template<class ART>
-void ManySolver<ART>::ee_compute_rho(const vector<ART> &evec, Eigen::Matrix<ART,-1,-1> &rho2, double coeff=1){
-	//make matrix by looping over all states that aren't traced over
-	vector<int> *statep;
-	if(project) statep=&orig_states;
-	else statep=&states;
-	int ti,tj;
-	for(int i=0;i<evec.size();i++){
-		for(int j=0;j<evec.size();j++){
-			if( ( (*statep)[i] & trunc_part) == ( (*statep)[j] & trunc_part) ){
-				for(ti=0;ti<trunc_states.size();ti++)
-					if( ( (*statep)[i] & ~trunc_part) == trunc_states[ti]) break;
-				for(tj=0;tj<trunc_states.size();tj++)
-					if( ( (*statep)[j] & ~trunc_part) == trunc_states[tj]) break;
-				if(ti==trunc_states.size() || tj==trunc_states.size()){
-					cout<<ti<<" "<<tj<<endl;
-					cout<<(bitset<16>)(*statep)[i]<<" "<<(bitset<16>)(*statep)[j]<<" "<<(bitset<16>)trunc_part<<endl;
-				}
-				rho2(ti,tj)+=coeff*(evec[i]*conj(evec[j]));
-			}
-		}
-	}
-}
-template<class ART>
-double ManySolver<ART>::ee_eval_rho(Eigen::Matrix<ART,-1,-1> &rho2){
-	double out=0;
-	//diagonalize matrix
-	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART,-1,-1> > rs(rho2);
-	//output sum
-	for(int i=0;i<trunc_states.size();i++) 
-		if(rs.eigenvalues()(i)>0) out-=rs.eigenvalues()(i)*log(rs.eigenvalues()(i));
-	return out;
-}
-template<class ART>
-void ManySolver<ART>::plot_spectrum(string name){			
-///if the model has a charge, plot the entanglement spectrum			
-	Eigen::Matrix<ART,-1,-1> rhoblock;
-	vector<int> rows; 
-	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART,-1,-1> > rs;
-	stringstream filename;
-	ofstream spectout;
-	if(!has_charge || !periodic){
-		cout<<"tried to plot spectrum, but its not appropriate"<<endl;
-		return;
-	}
-
-	filename<<"spectrum "<<name;
-	spectout.open(filename.str().c_str());			
-
-	for(int c=0;c<NPhi;c++){
-		for(int n=0;n<Ne;n++){
-			//sort trunc_states based on their charge
-			rows.clear();
-			for(int j=0;j<trunc_states.size();j++)
-				if(get_charge(trunc_states[j])==c && count_bits(trunc_states[j])==n) rows.push_back(j);
-			if (rows.size()	== 0) continue;
-
-			//use the same keys to get block-diagonal rho
-			rhoblock=Eigen::Matrix<ART,-1,-1>::Zero(rows.size(),rows.size());
-			for(int j=0;j<rows.size();j++){
-				for(int k=0;k<rows.size();k++){
-					rhoblock(j,k)=rho(rows[j],rows[k]);
-				}
-			}
-
-			//diagonalize the rho and print the results
-			rs.compute(rhoblock);			
-			for(int j=0;j<rows.size();j++) spectout<<c<<" "<<n<<" "<<rs.eigenvalues()(j)<<endl;
-		}
-	}
-	spectout.close();	
-}
 //convert a wavefunction in the truncated-orbitals basis to one in the Landau basis
 template<class ART>
 void ManySolver<ART>::basis_convert(vector<ART> &evec){
@@ -815,67 +653,4 @@ void ManySolver<ART>::expand(int state, ART coeff, int orig_state, vector<ART> &
 		}
 	}
 }
-
-//////////////////////utility functions, generally	
-//someday should probably make a math library that contains all these functions
-
-//counts the number of set bits in an integer
-template<class ART>
-int ManySolver<ART>::count_bits(int x){
-	int out=0, i=0,found_bits=0;
-	while(x!=found_bits){
-		if(1<<i & x){
-			out++;
-			found_bits+=1<<i;
-		}
-		i++;
-	}
-	return out;
-}
-//x choose p
-template<class ART>
-long int ManySolver<ART>::comb(int x,int p){
-	return factorial(x,x-p)/factorial(p);	
-}
-//computes the products of numbers from start to stop (a partial factorial)
-template<class ART>
-double ManySolver<ART>::factorial(int start,int stop){
-	if (stop==start) return 1;
-	else return start*factorial(start-1,stop);
-}	
-template<class ART>
-double ManySolver<ART>::factorial(int n){
-	if (n==1 || n==0) return 1;    
-	return n*factorial(n-1);
-}	
-//a function for computing powers of integers
-template<class ART>
-int ManySolver<ART>::intpow(int x, int p)
-{
-  if (p == 0) return 1;
-  if (p == 1) return x;
-
-  int tmp = intpow(x, p/2);
-  if (p%2 == 0) return tmp * tmp;
-  else return x * tmp * tmp;
-}
-template<class ART>
-double ManySolver<ART>::ClebschGordan(int a,int b,int L){
-//calculate CG coefficients from the formula on wikipedia
-//m1=a-Q,m2=b-Q, 2Q=NPhi-1,these are stored this way because sometimes they are half-integer
-//may eventually need to tabulate these since they are pretty slow to calculate
-	double prefactor1=sqrt((2*L+1)*factorial(L)*factorial(L)*factorial((NPhi-1)-L)/(1.*factorial((NPhi-1)+L+1)) );
-	double prefactor2=sqrt(factorial(L+a+b-(NPhi-1))*factorial(L-a-b+(NPhi-1))*factorial((NPhi-1)-a)*factorial((NPhi-1)-b)*factorial(a)*factorial(b));
-	double sum=0.;
-	int sign=1;
-	for(int k=0;k<=b;k++){
-		if (k%2==1) sign=-1;
-		else sign=1;
-		if(L-b+k<0) continue;
-		if((NPhi-1)-L-k<0 || L-(NPhi-1)+a+k<0 || (NPhi-1)-a-k<0) continue;
-		sum+=(sign*1.)/(1.*factorial((NPhi-1)-L-k)*factorial((NPhi-1)-a-k)*factorial(b-k)*factorial(L-(NPhi-1)+a+k)*factorial(L-b+k)*factorial(k));
-	}
-	return prefactor1*prefactor2*sum;
-}
-
 #endif

@@ -1,7 +1,7 @@
 #ifndef TORUS_SOLVER_H
 #define TORUS_SOLVER_H
 #include "ManySolver.h"
-#include "arscomp.h"
+//#include "arscomp.h"
 
 template <class ART>
 class TorusSolver:public ManySolver<ART>{
@@ -41,7 +41,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	Eigen::VectorXd sum;
 	int stop=15;	
 	vector<int> js;
-	bool arpack=true;
+	bool arpack=false;
 	if(!arpack){
 		js.push_back(0);
 		js.push_back(1);
@@ -56,7 +56,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	}	
 	
 	vector<complex<double> > eigvec;
-	int q=10;//(this->NPhi-this->nHigh)/this->Ne;
+	int q=(this->NPhi-this->nHigh)/this->Ne;
 	int nconverged;
 	vector < Eigen::Matrix<ART,-1,-1> > rho;
 	Eigen::Matrix<ART,-1,-1> temp;
@@ -68,42 +68,24 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		this->make_Hnn();
 	
 		if(!arpack){
-			this->es.compute(this->Hnn);
+			this->EigenDenseEigs();
 			
-			Eigen::VectorXd tempE=this->es.eigenvalues();
-			tempE=tempE/(1.*this->Ne);
-			sum=sum.array()+tempE.array()+se;
+			for(int k=0;k<this->nStates;k++) sum(k)+=this->getE(k)/(1.*this->Ne)+se;
 			for(int j=0;j<js.size();j++){
-				eigvec=vector<complex<double> >(this->nStates,0);
-				for(int k=0;k<this->nStates;k++) eigvec[k]=this->es.eigenvectors().col(js[j])(k);
-				for(int cut=0;cut<this->NPhi;cut++){
-					this->ee_setup(cut,(cut+this->NPhi/2)%this->NPhi);
-					temp=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
-					this->ee_compute_rho(eigvec,temp,1.);
-					ee(j)+=this->ee_eval_rho(temp)/(1.*this->NPhi);
-				}
+				ee(j)+=this->entanglement_entropy(this->getEV(j),this->states);
 			}
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
 
 			if(this->nStates<=stop) stop=this->nStates-1;
-			nconverged=this->eigenvalues(stop,10);
+			nconverged=this->eigenvalues(stop);
 //			ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
 	//		dprob.FindEigenvalues();
-//			dprob.FindEigenvectors();
+	//		dprob.FindEigenvectors();
 		
 			for(int k=0;k<nconverged;k++) sum(k)+=this->getE(k)/(1.*this->Ne)+se;
 
-			for(int k=0;k<stop;k++){
-				eigvec=this->getEV(k);
-				for(int j=0;j<this->NPhi;j++){
-					this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
-					temp=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
-					this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
-					this->ee_compute_rho(eigvec,temp,1./(1.*q));
-					ee(k)+=this->ee_eval_rho(temp)/(1.*this->NPhi);
-				}
-			}	
+			for(int k=0;k<nconverged;k++) ee(k)+=this->entanglement_entropy(this->getEV(k),this->states);
 //***get EE where density matrix is averaged between levels
 ////			for(int j=0;j<this->NPhi;j++){
 ////				this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
