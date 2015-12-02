@@ -588,7 +588,7 @@ void ManySolver<ART>::MultMv(ART * v, ART * w){
 	for(int i=0;i<nStates;i++) w[i]=0;
 	for(int i=0;i<nStates;i++){
 		for(int j=0;j<nStates;j++)
-			w[i]+=v[j]*-this->EigenDense(i,j);
+			w[i]+=v[j]*this->EigenDense(i,j);
 	}	
 		
 //	double alpha=1., beta=0.;

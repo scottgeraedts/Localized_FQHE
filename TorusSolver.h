@@ -37,7 +37,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	this->periodic=1;
 
 	double se=self_energy();
-	bool arpack=false;
+	bool arpack=true;
 
 	//which states to look at
 	double minE,maxE;
@@ -88,7 +88,6 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 			//compute windows, and get js from windows
 			minE=this->eigvals[0];
 			maxE=this->eigvals[this->nStates-1];
-			write_vector(eigvals,"Eigen");
 			for(int w=0;w<windows.size();w++){
 				low=lower_bound(this->eigvals.begin(),this->eigvals.end(),minE+windows[w]*(maxE-minE));
 				jindex=low-this->eigvals.begin();
@@ -109,11 +108,13 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		//****A call to ARPACK++. The fastest of all methods		
 
 			maxE=this->single_energy("LR");
-			minE=this->single_energy("SR");
+			minE=this->single_energy_2("SR");
+//			cout<<maxE<<" "<<minE<<endl;
 			double eps;
 			for(int w=0;w<windows.size();w++){
 				eps=windows[w]*(maxE-minE)+minE;
 				this->eigenvalues(stop,eps);
+//				for(int k=0;k<stop;k++) cout<<this->eigvals[k]<<endl;
 				temp=this->entanglement_entropy(this->eigvecs,this->states,0);
 				ee(w)+=temp;
 				ee2(w)+=temp*temp;
