@@ -32,125 +32,121 @@ template <class ART>
 TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	//stuff unique to the torus
 	double alpha=1.;
-	Ly=sqrt(M_PI*this->NPhi*this->Ne/2.*alpha);//aspect ratio is Lx/Ly=Ne/4*alpha
-	Lx=(4/(1.*this->Ne*alpha))*Ly;
+	Ly=sqrt(2.*M_PI*this->NPhi*alpha);//aspect ratio is Lx/Ly=alpha
+	Lx=Ly/alpha;
 	this->periodic=1;
 
 	double se=self_energy();
-	Eigen::VectorXd ee,ee2;
-	Eigen::VectorXd sum;
-	int stop=15;	
-	vector<int> js;
 	bool arpack=false;
-	//stuff for density of states calculation
-	double startE=-2, endE=8, dE=0.01;
+
+	//which states to look at
+	double minE,maxE;
+	vector<double> windows;//which energies to look at
+	for(int i=1;i<4;i++) windows.push_back(i/(1.*4));
+	double jindex;
+
+	//counters
+	Eigen::VectorXd ee=Eigen::VectorXd::Zero(windows.size());
+	Eigen::VectorXd ee2=Eigen::VectorXd::Zero(windows.size());
+	Eigen::VectorXd kltot=Eigen::VectorXd::Zero(windows.size());
+	Eigen::VectorXd rtot=Eigen::VectorXd::Zero(windows.size());
+	Eigen::VectorXd oldrtot=Eigen::VectorXd::Zero(windows.size());
+
+	vector<double> tempvec;
+	
+	//stuff for density of states calculation (increase these numbers if disorder strength>30)
+	double startE=-30, endE=30, dE=0.01;
 	int ngrid=floor((endE-startE)/dE);
 	vector<double> energy_grid(ngrid,0);
 	for(int i=0;i<ngrid;i++) energy_grid[i]=startE+i*dE;
-	vector<double> DOS(ngrid,0);
-	vector<double> tempvec(this->nStates,0);
+	tempvec=vector<double>(ngrid,0);
+	vector< vector<double> >DOS(windows.size(),tempvec);
+
+	int stop=25; //how many eigenstates to look at in each energy window
+	MTRand ran(stop);
+	int kl1=ran.randInt(stop-1);//the states we will compute kullback-leibler on
+	int kl2=kl1;
+	while(kl2==kl1) kl2=ran.randInt(stop-1);
+	
+	if(!arpack)
+		tempvec=vector<double>(this->nStates,0);	
+	else
+		tempvec=vector<double>(stop*windows.size(),0);	
+
 	vector< vector<double> > energies(this->NROD,tempvec);
 	double temp;
-	
-	if(!arpack){
-		for(int j=25;j<this->nStates;j+=75) js.push_back(j);
-
-		ee=Eigen::VectorXd::Zero(js.size());
-		ee2=Eigen::VectorXd::Zero(js.size());
-		sum=Eigen::VectorXd::Zero(this->nStates);
-
-
-
-	}else{
-		ee=Eigen::VectorXd::Zero(stop);
-		sum=Eigen::VectorXd::Zero(stop);
-	}	
-	
-	vector<complex<double> > eigvec;
-	int q=(this->NPhi-this->nHigh)/this->Ne;
-	int nconverged;
-	
+	vector<double>::iterator low;
+			
 	for(int i=0;i<this->NROD;i++){
+		//construct hamiltonian
 		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
 		this->single.init(i,this->disorder_strength,this->nLow,this->nHigh);
 		this->make_Hnn();
 	
 		if(!arpack){
-			this->EigenDenseEigs();
-			
-			for(int k=0;k<this->nStates;k++) sum(k)+=this->getE(k)/(1.*this->Ne)+se;
-			for(int j=0;j<js.size();j++){
-				temp=this->entanglement_entropy(this->eigvecs,this->states,js[j],js[j]+25);
-				ee(j)+=temp;
-				ee2(j)+=temp*temp;
+			this->EigenDenseEigs();	
+			//compute windows, and get js from windows
+			minE=this->eigvals[0];
+			maxE=this->eigvals[this->nStates-1];
+			write_vector(eigvals,"Eigen");
+			for(int w=0;w<windows.size();w++){
+				low=lower_bound(this->eigvals.begin(),this->eigvals.end(),minE+windows[w]*(maxE-minE));
+				jindex=low-this->eigvals.begin();
+				if(jindex> this->nStates-stop) cout<<"window too close to the end"<<endl;
+
+			//compute observables in each window
+				temp=this->entanglement_entropy(this->eigvecs,this->states,jindex);
+				ee(w)+=temp;
+				ee2(w)+=temp*temp;
+				kltot(w)+=kullback_leibler(this->eigvecs[jindex+kl1],this->eigvecs[jindex+kl2]);
+//				density_of_states(this->eigvals,DOS[w],energy_grid,jindex,jindex+stop);
+				oldrtot(w)+=stupid_spacings(this->eigvals,jindex,jindex+stop);	
 			}
 			//average the density of states
-			density_of_states(this->eigvals,DOS,energy_grid);	
 			energies[i]=this->eigvals; //annoyingly, need to save all the eigenvalues for later
 			
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
 
-			if(this->nStates<=stop) stop=this->nStates-1;
-			nconverged=this->eigenvalues(stop);
-//			ARCompStdEig<double, TorusSolver<ART> >  dprob(this->nStates, stop, this, &TorusSolver<ART>::MultMv,"SR",(int)0, 1e-10,1e6);//someday put this part into matprod?
-	//		dprob.FindEigenvalues();
-	//		dprob.FindEigenvectors();
-		
-			for(int k=0;k<nconverged;k++) sum(k)+=this->getE(k)/(1.*this->Ne)+se;
-
-			for(int k=0;k<nconverged;k++) ee(k)+=this->entanglement_entropy(this->eigvecs,this->states,k);
-//***get EE where density matrix is averaged between levels
-////			for(int j=0;j<this->NPhi;j++){
-////				this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
-////				rho[j]=Eigen::Matrix<ART,-1,-1>::Zero(this->trunc_states.size(),this->trunc_states.size());
-////			}
-//			for(int k=0;k<q;k++){
-//				eigvec=this->getEV(this->getPos(k));
-//				if(this->project) this->basis_convert(eigvec);
-//				for(int j=0;j<this->NPhi;j++){
-//					this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
-//					this->ee_compute_rho(eigvec,rho[j],1./(1.*q));
-//				}
-//			}//NPhi
-//			for(int j=0;j<this->NPhi;j++) ee(j)+=this->ee_eval_rho(rho[j]);
-/////****done 
+			maxE=this->single_energy("LR");
+			minE=this->single_energy("SR");
+			double eps;
+			for(int w=0;w<windows.size();w++){
+				eps=windows[w]*(maxE-minE)+minE;
+				this->eigenvalues(stop,eps);
+				temp=this->entanglement_entropy(this->eigvecs,this->states,0);
+				ee(w)+=temp;
+				ee2(w)+=temp*temp;
+				kltot(w)+=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2]);
+				oldrtot(w)+=stupid_spacings(this->eigvals);
+//				density_of_states(this->eigvals,DOS[w],energy_grid);
+				for(int k=0;k<stop;k++) energies[i][w*stop+k]=this->eigvals[k];
+			}
+			
 		}//if arpack
 	}//NROD
 
-	if(!arpack){ //level spacings
-		double rtot=0., oldrtot=0;
-		transform(DOS.begin(), DOS.end(), DOS.begin(),bind1st(multiplies<double>(),1/(1.*this->NROD) ) );	
-	//	for(int i=0;i<rho.size();i++) cout<<rho[i]<<endl;
-		for(int r=0;r<this->NROD;r++){
-			rtot+=level_spacings(energies[r],DOS,energy_grid)/(1.*this->NROD);
-			oldrtot+=stupid_spacings(energies[r])/(1.*this->NROD);
-		}
-		ofstream rfile;
-		rfile.open("r");
-		rfile<<rtot<<endl;
-		rfile.close();
-	}
-	
-	//write energies
-	ofstream eout;
-	sum/=(1.*this->NROD);
-	eout.open("energies");
-	for(int i=0;i<sum.size();i++) eout<<sum(i)<<" ";
-	eout<<endl;
-	eout.close();
+//calculated unfolded level spacing ratios, not worrying about this for now
+//	for(int w=0;w<windows.size();w++){
+//		transform(DOS[w].begin(), DOS[w].end(), DOS[w].begin(),bind1st(multiplies<double>(),1/(1.*this->NROD) ) );	
+//		for(int r=0;r<this->NROD;r++){
+//			if(!arpack){
+//				low=lower_bound(this->eigvals.begin(),this->eigvals.end(),minE+windows[w]*(maxE-minE));
+//				rtot(w)+=level_spacings(energies[r],DOS[w],energy_grid,low-this->eigvals.begin(),low-this->eigvals.begin()+stop)/(1.*this->NROD);
+//			}else
+//				rtot(w)+=level_spacings(energies[r],DOS[w],energy_grid,stop*w,stop*(w+1))/(1.*this->NROD);
+//		}
+//	}
 
-	//write entropy
-	ofstream sout;
+	write_vector(rtot,"r",this->NROD);
+	write_vector(oldrtot,"oldr",this->NROD);
 	ee/=(1.*this->NROD);
 	ee2/=(1.*this->NROD);
-	sout.open("entropy");
-	sout<<ee.sum()/(1.*this->NPhi)<<" ";
-	for(int i=0;i<ee.size();i++) sout<<ee(i)<<" ";
-	for(int i=0;i<ee2.size();i++) sout<<ee2(i)<<" ";
-	sout<<endl;
-	sout.close();
-	
+	write_vector(ee,"entropy");
+	Eigen::VectorXd vare(windows.size());
+	for(int i=0;i<windows.size();i++) vare[i]=ee2[i]-ee[i]*ee[i];
+	write_vector(vare,"varE");
+	write_vector(kltot,"kullbackleibler",this->NROD);	
 }
 ///functions which are definitely unique to the torus
 template <class ART>
