@@ -37,7 +37,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	this->periodic=1;
 
 	double se=self_energy();
-	Eigen::VectorXd ee;
+	Eigen::VectorXd ee,ee2;
 	Eigen::VectorXd sum;
 	int stop=15;	
 	vector<int> js;
@@ -48,16 +48,15 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	vector<double> energy_grid(ngrid,0);
 	for(int i=0;i<ngrid;i++) energy_grid[i]=startE+i*dE;
 	vector<double> DOS(ngrid,0);
-	vector<double> temp(this->nStates,0);
-	vector< vector<double> > energies(this->NROD,temp);
+	vector<double> tempvec(this->nStates,0);
+	vector< vector<double> > energies(this->NROD,tempvec);
+	double temp;
 	
 	if(!arpack){
-		js.push_back(0);
-		js.push_back(1);
-		js.push_back(2);
-		for(int j=3;j<this->nStates;j+=10) js.push_back(j);
+		for(int j=25;j<this->nStates;j+=75) js.push_back(j);
 
 		ee=Eigen::VectorXd::Zero(js.size());
+		ee2=Eigen::VectorXd::Zero(js.size());
 		sum=Eigen::VectorXd::Zero(this->nStates);
 
 
@@ -81,7 +80,9 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 			
 			for(int k=0;k<this->nStates;k++) sum(k)+=this->getE(k)/(1.*this->Ne)+se;
 			for(int j=0;j<js.size();j++){
-				ee(j)+=this->entanglement_entropy(this->getEV(j),this->states);
+				temp=this->entanglement_entropy(this->eigvecs,this->states,js[j],js[j]+25);
+				ee(j)+=temp;
+				ee2(j)+=temp*temp;
 			}
 			//average the density of states
 			density_of_states(this->eigvals,DOS,energy_grid);	
@@ -98,7 +99,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		
 			for(int k=0;k<nconverged;k++) sum(k)+=this->getE(k)/(1.*this->Ne)+se;
 
-			for(int k=0;k<nconverged;k++) ee(k)+=this->entanglement_entropy(this->getEV(k),this->states);
+			for(int k=0;k<nconverged;k++) ee(k)+=this->entanglement_entropy(this->eigvecs,this->states,k);
 //***get EE where density matrix is averaged between levels
 ////			for(int j=0;j<this->NPhi;j++){
 ////				this->ee_setup(j,(j+this->NPhi/2)%this->NPhi);
@@ -118,10 +119,13 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	}//NROD
 
 	if(!arpack){ //level spacings
-		double rtot=0.;
+		double rtot=0., oldrtot=0;
 		transform(DOS.begin(), DOS.end(), DOS.begin(),bind1st(multiplies<double>(),1/(1.*this->NROD) ) );	
 	//	for(int i=0;i<rho.size();i++) cout<<rho[i]<<endl;
-		for(int r=0;r<this->NROD;r++) rtot+=level_spacings(energies[r],DOS,energy_grid)/(1.*this->NROD);
+		for(int r=0;r<this->NROD;r++){
+			rtot+=level_spacings(energies[r],DOS,energy_grid)/(1.*this->NROD);
+			oldrtot+=stupid_spacings(energies[r])/(1.*this->NROD);
+		}
 		ofstream rfile;
 		rfile.open("r");
 		rfile<<rtot<<endl;
@@ -139,9 +143,11 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	//write entropy
 	ofstream sout;
 	ee/=(1.*this->NROD);
+	ee2/=(1.*this->NROD);
 	sout.open("entropy");
 	sout<<ee.sum()/(1.*this->NPhi)<<" ";
 	for(int i=0;i<ee.size();i++) sout<<ee(i)<<" ";
+	for(int i=0;i<ee2.size();i++) sout<<ee2(i)<<" ";
 	sout<<endl;
 	sout.close();
 	
