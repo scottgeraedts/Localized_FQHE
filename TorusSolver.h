@@ -75,7 +75,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		tempvec=vector<double>(stop*windows.size(),0);	
 
 	vector< vector<double> > energies(this->NROD,tempvec);
-	double temp;
+	double temp,temp_oldr, temp_kl;
 	vector<double>::iterator low;
 			
 	for(int i=0;i<this->NROD;i++){
@@ -119,8 +119,11 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 				temp=this->entanglement_entropy(this->eigvecs,this->states,0);
 				ee(w)+=temp;
 				ee2(w)+=temp*temp;
-				kltot(w)+=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2],w);
-				oldrtot(w)+=stupid_spacings(this->eigvals,w);
+				temp_kl=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2],w);
+				kltot(w)+=temp_kl;
+				temp_oldr=stupid_spacings(this->eigvals,w);
+				oldrtot(w)+=temp_oldr;
+				cout<<w<<" "<<temp<<" "<<temp_oldr<<" "<<temp_kl<<endl; //print, just in case this run dies
 //				density_of_states(this->eigvals,DOS[w],energy_grid);
 				for(int k=0;k<stop;k++) energies[i][w*stop+k]=this->eigvals[k];
 			}
