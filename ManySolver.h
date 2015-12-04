@@ -34,10 +34,11 @@ public:
 	void ZeroHnn();
 	void make_Hnn();
 	void disorderHnn();
+	void make_states();
 	
 protected:
 	int Ne,NPhi,nStates,NPhi2,NPhi3;
-	int nHigh,nLow,NROD;
+	int nHigh,nLow,NROD,random_offset;
 	int charge,has_charge,disorder,periodic,cache,project,lookups;
 	double disorder_strength,V3overV1;
 	vector<double> HaldaneV;
@@ -52,8 +53,6 @@ protected:
 	virtual int get_charge(int state)=0;//could make virtual
 
 	void init(int, double, int, int, double, double);
-	template<class T> T value_from_file(ifstream &infile, T def);
-	void make_states();
 	void make_cache();
 	void second_cache();
 
@@ -105,7 +104,6 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
 	infile.open("params");
 	string temp("out");
 	if (infile.is_open()){
-		
 		Ne=value_from_file(infile,-2);
 		NPhi=value_from_file(infile,-2);
 		charge=value_from_file(infile,-1);
@@ -115,6 +113,7 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
 		disorder_strength=value_from_file(infile,0.);
 		V3overV1=value_from_file(infile,0.);
 		NROD=value_from_file(infile,1);
+		random_offset=value_from_file(infile,0);
 		
 		infile.close();
 	}
@@ -123,12 +122,13 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
 	
 	this->init_wavefunction(NPhi);
 	
-	cache=1;
 	//set flags and do some simple sanity checks
 	if(disorder_strength>0) disorder=1;
 	else disorder=0;
 	if(nHigh>0 || nLow>0) project=1;
 	else project=0;
+	if(disorder || project) cache=1;
+	else cache=0;
 	lookups=0;
 	if (charge==-1) has_charge=0;
 	else has_charge=1;
@@ -149,21 +149,6 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
 	//you wouldn't believe how much faster this makes the code
 	NPhi2=NPhi*NPhi;
 	NPhi3=NPhi*NPhi2;
-	make_states();
-}
-
-template<class ART> template<class T>
-T ManySolver<ART>::value_from_file(ifstream &infile, T def){
-	string line;
-	stringstream convert;
-	T out;
-	if(getline(infile,line)){
-		convert.str("");
-		convert<<line;
-		convert>>out;
-		return out;
-	}
-	else return def;
 }	
 
 ////*********************SETUP FUNCTIONS
@@ -244,7 +229,6 @@ void ManySolver<ART>::make_Hnn(){
 						 ( (!(states[i] & 1<<d) && d>=nLow && d<NPhi-nHigh) || a==d || b==d) && 
 						 ( (a>=nLow && a<NPhi-nHigh) || a==c ||a==d) &&
 						 ( (b<NPhi-nHigh && b>=nLow) || b==c ||b==d)  )  {
-				//	cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<i<<" "<<endl;
 							j=lookup_flipped(i,a,b,c,d);
 							this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}
@@ -255,10 +239,10 @@ void ManySolver<ART>::make_Hnn(){
 	}//a
 }
 
-template<class ART>
-void ManySolver<ART>::make_cache(){
+template<>
+inline void ManySolver< complex<double> >::make_cache(){
 	int d;
-	ART temp;
+	complex<double> temp;
 	four_body_cache.resize(pow(NPhi,4));
 	two_body_cache.resize(pow(NPhi,2));
 	
@@ -292,6 +276,12 @@ void ManySolver<ART>::make_cache(){
 			}	
 		}
 	}
+}
+
+template<>
+inline void ManySolver<double>::make_cache(){
+	cout<<"can't cache with non-complex data types"<<endl;
+	exit(0);
 }
 
 template<class ART>
@@ -333,28 +323,19 @@ void ManySolver<ART>::second_cache(){
 }
 
 ////*****FUNCTIONS WHICH HELP WITH INTERACTION TERMS
-template<class ART>
-ART ManySolver<ART>::get_interaction(int a,int b,int c, int d){
-	if(!cache) return four_body(a,b,c,d);
-	else if(!project) return four_body_cache[four_array_map(a,b,c,d)];
-	else return four_body_project(a,b,c,d);
-}
-
-//returns the disorder terms from a Hamiltonian
-template<class ART>
-ART ManySolver<ART>::get_disorder(int a, int b){
-	if(!cache) return single.getH(b,a);
-	else if(!project) return two_body_cache[four_array_map(a,b,0,0)];
-	else return two_body_project(a,b);
+template<>
+inline double ManySolver<double>::get_disorder(int a,int b){
+	cout<<"can't add disorder to a non-complex valued object"<<endl;
+	exit(0);
 }
 
 //maps indices from a four array to indices from a 1 array
 template<class ART>
 int ManySolver<ART>::four_array_map(int a,int b,int c, int d){ return a+b*NPhi+c*NPhi2+d*NPhi3; }
 
-template<class ART>
-ART ManySolver<ART>::four_body_project(int a,int b,int c,int d){
-	ART out=0;
+template<>
+inline complex<double> ManySolver< complex<double> >::four_body_project(int a,int b,int c,int d){
+	complex<double> out=0;
 	int id, sa,sb,sc,sd,signAB, signCD;
 	for(int ia=0;ia<NPhi;ia++){
 		for(int ib=0;ib<NPhi;ib++){
@@ -391,9 +372,15 @@ ART ManySolver<ART>::four_body_project(int a,int b,int c,int d){
 	}
 	return out;
 }
-template<class ART>
-ART ManySolver<ART>::two_body_project(int a,int b){
-	ART out=0;
+
+template<>
+inline double ManySolver<double>::four_body_project(int a, int b, int c, int d){
+	cout<<"can't project in a non-complex object"<<endl;
+	exit(0);
+}
+template<>
+inline complex<double> ManySolver< complex<double> >::two_body_project(int a,int b){
+	complex<double> out=0;
 	for(int ia=0;ia<NPhi;ia++){
 		for(int ib=0;ib<NPhi;ib++){
 	//		cout<<ia<<" "<<ib<<" "<<single.evec(a+lowDeltas, ia)<<" "<<
@@ -402,6 +389,26 @@ ART ManySolver<ART>::two_body_project(int a,int b){
 	}
 //	cout<<a<<" "<<b<<" **************"<<out<<endl;
 	return out;
+}
+template<>
+inline double ManySolver<double>::two_body_project(int a, int b){
+	cout<<"can't project in a non-complex object"<<endl;
+	exit(0);
+}
+
+template<class ART>
+ART ManySolver<ART>::get_interaction(int a,int b,int c, int d){
+	if(!cache) return four_body(a,b,c,d);
+	else if(!project) return four_body_cache[four_array_map(a,b,c,d)];
+	else return four_body_project(a,b,c,d);
+}
+
+//returns the disorder terms from a Hamiltonian
+template<>
+inline complex<double> ManySolver< complex<double> >::get_disorder(int a, int b){
+	if(!cache) return single.getH(b,a);
+	else if(!project) return two_body_cache[four_array_map(a,b,0,0)];
+	else return two_body_project(a,b);
 }
 
 //a Coulomb interaction
@@ -614,11 +621,11 @@ void ManySolver<ART>::basis_convert(vector<ART> &evec){
 //a recursive function used to help with the above basis change
 //it finds the first set bit in a state, and expands that bit in the old basis
 //then it chops off that part of the bit and recurses
-template<class ART>
-void ManySolver<ART>::expand(int state, ART coeff, int orig_state, vector<ART> &new_evec){
+template< >
+inline void ManySolver<complex<double> >::expand(int state, complex<double>  coeff, int orig_state, vector<complex<double> > &new_evec){
 	vector<int>::const_iterator low;
 	int largest_bit=-1;
-	ART temp;
+	complex<double>  temp;
 	//find largest set bit
 	for(int i=NPhi;i>-1;i--){//speedup idea: start at previously found largest bit
 		if(state & 1<<i) {
@@ -645,12 +652,18 @@ void ManySolver<ART>::expand(int state, ART coeff, int orig_state, vector<ART> &
 			
 			//to get the sign right, remember that we are expanding bits from largest to smallest. So if the expanded bit is not the smallest, we need to do 
 			//(-1)^(number of smaller bits)
-			if(count_bits(orig_state%(1<<i))%2==1) temp=(ART)(-1);
-			else temp=(ART)1;
+			if(count_bits(orig_state%(1<<i))%2==1) temp=(complex<double> )(-1);
+			else temp=(complex<double> )1;
 			temp*=conj(single.evec(largest_bit,i));
 	//		cout<<i<<" "<<largest_bit<<" "<<temp<<endl;
 			expand(state%(1<<largest_bit),coeff*temp,orig_state| 1<<i,new_evec);
 		}
 	}
 }
+template<>
+inline void ManySolver<double>::expand(int state, double coeff, int o, vector<double> &evec){
+	cout<<"can't project in a non-complex object"<<endl;
+	exit(0);
+}
+
 #endif

@@ -31,6 +31,7 @@ private:
 template <class ART>
 TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	//stuff unique to the torus
+	this->make_states();
 	double alpha=1.;
 	Ly=sqrt(2.*M_PI*this->NPhi*alpha);//aspect ratio is Lx/Ly=alpha
 	Lx=Ly/alpha;
@@ -80,7 +81,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	for(int i=0;i<this->NROD;i++){
 		//construct hamiltonian
 		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
-		this->single.init(i,this->disorder_strength,this->nLow,this->nHigh);
+		this->single.init(i+this->random_offset,this->disorder_strength,this->nLow,this->nHigh);
 		this->make_Hnn();
 	
 		if(!arpack){
@@ -97,9 +98,9 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 				temp=this->entanglement_entropy(this->eigvecs,this->states,jindex);
 				ee(w)+=temp;
 				ee2(w)+=temp*temp;
-				kltot(w)+=kullback_leibler(this->eigvecs[jindex+kl1],this->eigvecs[jindex+kl2]);
+				kltot(w)+=kullback_leibler(this->eigvecs[jindex+kl1],this->eigvecs[jindex+kl2],w);
 //				density_of_states(this->eigvals,DOS[w],energy_grid,jindex,jindex+stop);
-				oldrtot(w)+=stupid_spacings(this->eigvals,jindex,jindex+stop);	
+				oldrtot(w)+=stupid_spacings(this->eigvals,jindex,jindex+stop,w);	
 			}
 			//average the density of states
 			energies[i]=this->eigvals; //annoyingly, need to save all the eigenvalues for later
@@ -118,8 +119,8 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 				temp=this->entanglement_entropy(this->eigvecs,this->states,0);
 				ee(w)+=temp;
 				ee2(w)+=temp*temp;
-				kltot(w)+=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2]);
-				oldrtot(w)+=stupid_spacings(this->eigvals);
+				kltot(w)+=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2],w);
+				oldrtot(w)+=stupid_spacings(this->eigvals,w);
 //				density_of_states(this->eigvals,DOS[w],energy_grid);
 				for(int k=0;k<stop;k++) energies[i][w*stop+k]=this->eigvals[k];
 			}
