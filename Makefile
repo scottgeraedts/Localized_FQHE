@@ -16,6 +16,9 @@ EXECUTABLE=torus.out sphere.out
 
 all: $(SOURCES) $(EXECUTABLE)
 	
+singletest.out: singletest.o SingleSolver.o Potential.o
+	$(CC) -I$(MYDIR) singletest.o SingleSolver.o Potential.o $(LIBS) -o singletest.out
+
 torus.out: main.o SingleSolver.o Potential.o
 	$(CC) -I$(MYDIR) main.o SingleSolver.o Potential.o $(LIBS) -o torus.out
 

@@ -32,11 +32,13 @@ private:
 	void make_potential_delta(map <string, double> &params);
 	void make_potential_lattice(map <string, double> &params);
 	void make_potential_gaussian(map <string, double> &params);
+	void make_potential_test(map <string, double> &params);
 };
 
 class SingleSolver{
 public:
 	SingleSolver(int NPhi,int N_deltas, double Lx=0, double Ly=0, int NROD=1, int shift=0, double Vstrength=1. );
+	void testDistance();
 	void visualizer();
 	void run();
 	complex<double> getH(int,int);

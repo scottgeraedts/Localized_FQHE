@@ -69,7 +69,7 @@ protected:
 	
 	//matvecs
 	void explicitMultMv(ART *v, ART *w);
-	void MultMv(ART *v, ART *w);
+//	void MultMv(ART *v, ART *w);
 	Eigen::Matrix<ART,-1,1> MultEigen(Eigen::Matrix<ART,-1,1>);
 	void MatvecToDense();
 
@@ -589,17 +589,23 @@ void ManySolver<ART>::explicitMultMv(ART* v, ART* w){
 		
 } //  MultMv.
 
-template<class ART>
-void ManySolver<ART>::MultMv(ART * v, ART * w){
-	for(int i=0;i<nStates;i++) w[i]=0;
-	for(int i=0;i<nStates;i++){
-		for(int j=0;j<nStates;j++)
-			w[i]+=v[j]*this->EigenDense(i,j);
-	}	
-		
-//	double alpha=1., beta=0.;
-//	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, this->EigenDense.data(), nStates, v, 1, &beta, w, 1);
-}
+//template<class ART>
+//void ManySolver<ART>::MultMv(ART * v, ART * w){
+////	for(int i=0;i<nStates;i++) w[i]=0;
+////	for(int i=0;i<nStates;i++){
+////		for(int j=0;j<nStates;j++)
+////			w[i]+=v[j]*this->EigenDense(i,j);
+////	}	
+//	Eigen::Map <Eigen::Matrix<ART, Eigen::Dynamic, 1> > mapped_v(v,nStates);
+////	Eigen::Matrix<ART,-1,1> mapped_v(n);
+////	for(int i=0;i<n;i++) mapped_v(i)=v[i];	
+//	mult_out=this->EigenDense*mapped_v;
+//	//for(int i=0;i<n;i++) w[i]=out(i);	
+//	Eigen::Map <Eigen::Matrix<ART, -1, 1> > (w,nStates,1)=mult_out; //using just out.data() fails for an unknown reason
+//		
+////	double alpha=1., beta=0.;
+////	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, this->EigenDense.data(), nStates, v, 1, &beta, w, 1);
+//}
 
 template<class ART>
 Eigen::Matrix<ART,-1,1> ManySolver<ART>::MultEigen(Eigen::Matrix<ART,-1,1> invec){
