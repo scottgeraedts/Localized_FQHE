@@ -116,8 +116,12 @@ void TorusSolver<ART>::run_finite_energy(){
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
 
-			maxE=this->single_energy("LR");
-			minE=this->single_energy_2("SR");
+			if(i==0){
+				maxE=this->single_energy("LM");
+				maxE=abs(maxE);
+				minE=-maxE;
+			}
+			//minE=this->single_energy_2("SR");
 //			cout<<maxE<<" "<<minE<<endl;
 			double eps;
 			for(int w=0;w<windows.size();w++){
