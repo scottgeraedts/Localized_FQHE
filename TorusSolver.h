@@ -41,7 +41,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	this->periodic=1;
 	arpack=true;
 
-	run_groundstate();
+	run_finite_energy();
 }
 
 template<class ART>
@@ -106,7 +106,7 @@ void TorusSolver<ART>::run_finite_energy(){
 				temp=this->entanglement_entropy(this->eigvecs,this->states,jindex);
 				ee(w)+=temp;
 				ee2(w)+=temp*temp;
-				kltot(w)+=kullback_leibler(this->eigvecs[jindex+kl1],this->eigvecs[jindex+kl2],w);
+				kltot(w)+=kullback_leibler(this->eigvecs[jindex+kl1],this->eigvecs[jindex+kl2]);
 //				density_of_states(this->eigvals,DOS[w],energy_grid,jindex,jindex+stop);
 				oldrtot(w)+=stupid_spacings(this->eigvals,jindex,jindex+stop,w);	
 			}
@@ -127,7 +127,7 @@ void TorusSolver<ART>::run_finite_energy(){
 				temp=this->entanglement_entropy(this->eigvecs,this->states,0);
 				ee(w)+=temp;
 				ee2(w)+=temp*temp;
-				temp_kl=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2],w);
+				temp_kl=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2]);
 				kltot(w)+=temp_kl;
 				temp_oldr=stupid_spacings(this->eigvals,w);
 				oldrtot(w)+=temp_oldr;
