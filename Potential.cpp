@@ -6,6 +6,7 @@ Potential::Potential(string _type, int _qbounds, int seed, double _Lx, double _L
 	if (type=="gaussian") make_potential_gaussian(params);
 	else if(type=="delta") make_potential_delta(params);
 	else if(type=="lattice") make_potential_lattice(params);
+	else if(type=="test") make_potential_test(params);
 	else cout<<"type not recognized"<<endl;
 }
 void Potential::make_potential_gaussian(map <string, double> &params){
@@ -46,7 +47,6 @@ void Potential::make_potential_delta(map <string, double> &params){
 void Potential::make_potential_lattice(map <string, double> &params){
 	double qx,qy;
 	complex<double> temp(0,0);
-	int nLow=floor(params["nLow"]+0.1);
 	int nHigh=floor(params["nHigh"]+0.1);
 	double Vstrength=params["Vstrength"];
 //	cout<<"ns: "<<nLow<<" "<<nHigh<<endl;
@@ -67,6 +67,32 @@ void Potential::make_potential_lattice(map <string, double> &params){
 		}
 	}
 }
+//used to test the effects of putting two delta functions close together
+void Potential::make_potential_test(map <string, double> &params){
+	double qx,qy;
+	complex<double> temp(0,0);
+	double Vstrength=params["Vstrength"];
+	double x=params["distance"];
+
+	xloc.push_back( 0. ); 
+	yloc.push_back( 0. );
+	sign.push_back(1);//list of locations and signs of delta functions
+
+	xloc.push_back( Lx*x ); 
+	yloc.push_back( 0 );
+	sign.push_back(1);//list of locations and signs of delta functions
+
+	for(int i=0;i<2*qbounds+1;i++){
+		for(int j=0;j<=qbounds;j++){
+			qx=2.*M_PI*(i-qbounds)/(1.*Lx); qy=2.*M_PI*j/(1.*Ly);
+			temp=complex<double>(0,0);
+			for(unsigned int k=0;k<xloc.size();k++)
+				temp+=sign[k]*polar(Vstrength,-xloc[k]*qx-yloc[k]*qy);
+			V(i,j)=temp;	
+		}
+	}
+}
+
 complex<double> Potential::get_potential(int mx,int my){
 	//note that Vgauss only stores elements for qy>=0, if qy<0 you must take negative and complex conjugate
 	//also in the x direction the index 0 stores the element mx=-CUTOFF

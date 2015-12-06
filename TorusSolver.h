@@ -91,7 +91,7 @@ void TorusSolver<ART>::run_finite_energy(){
 		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
 		this->single.init(i+this->random_offset,this->disorder_strength,this->nLow,this->nHigh);
 		this->make_Hnn();
-	
+		
 		if(!arpack){
 			this->EigenDenseEigs();	
 			//compute windows, and get js from windows
@@ -116,15 +116,11 @@ void TorusSolver<ART>::run_finite_energy(){
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
 
-			if(i==0){
-				maxE=this->single_energy("LM");
-				maxE=abs(maxE);
-				minE=-maxE;
-			}
-			//minE=this->single_energy_2("SR");
-//			cout<<maxE<<" "<<minE<<endl;
+			maxE=this->single_energy("LR");
+			minE=this->single_energy("SR");
 			double eps;
 			for(int w=0;w<windows.size();w++){
+				t=clock();
 				eps=windows[w]*(maxE-minE)+minE;
 				this->eigenvalues(stop,eps);
 //				for(int k=0;k<stop;k++) cout<<this->eigvals[k]<<endl;

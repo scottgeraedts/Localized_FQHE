@@ -12,6 +12,19 @@ SingleSolver::SingleSolver(int _NPhi, int N_deltas, double _Lx, double _Ly, int 
 	energies=Eigen::VectorXd::LinSpaced(energy_mesh,-0.1*meshstart,0.1*meshstart);	
 	spacings=Eigen::VectorXd::Zero(energy_mesh);
 }
+void SingleSolver::testDistance(){	
+	map <string, double> params;
+	params["Vstrength"]=1.;
+	
+	for(double x=0.5;x>0;x-=0.0025){
+		//cout<<"-------"<<endl<<x<<endl<<"---------"<<endl;
+		params["distance"]=x;
+		Potential p_deltas("test",qbounds,0,Lx,Ly,params);
+		make_Hamiltonian(p_deltas);
+		proj.compute(Hnn);
+		cout<<x<<" "<<proj.eigenvalues()(NPhi-1)<<" "<<proj.eigenvalues()(NPhi-2)<<endl;	
+	}
+}
 
 //the following two functions are designed to be called by a ManySolver
 void SingleSolver::init(int seed,double V, int nLow, int nHigh){
