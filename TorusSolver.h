@@ -18,7 +18,10 @@ private:
 	int count;
 	double self_energy();
 	double Misra_onehalf(double t,double z);
+	bool arpack;
 
+	void run_groundstate();
+	void run_finite_energy();
 	ART two_body(int a,int b);//could make virtual
 	ART four_body(int a,int b,int c,int d);//could make virtual
 	ART four_body_coulomb(int a,int b, int c, int d);
@@ -36,9 +39,14 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	Ly=sqrt(2.*M_PI*this->NPhi*alpha);//aspect ratio is Lx/Ly=alpha
 	Lx=Ly/alpha;
 	this->periodic=1;
+	arpack=true;
 
+	run_groundstate();
+}
+
+template<class ART>
+void TorusSolver<ART>::run_finite_energy(){
 	double se=self_energy();
-	bool arpack=true;
 
 	//which states to look at
 	double minE,maxE;
@@ -152,6 +160,34 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	for(int i=0;i<windows.size();i++) vare[i]=ee2[i]-ee[i]*ee[i];
 	write_vector(vare,"varE");
 	write_vector(kltot,"kullbackleibler",this->NROD);	
+}
+
+template<class ART>
+void TorusSolver<ART>::run_groundstate(){
+
+	int stop=25;
+	Eigen::VectorXd energy_sum;
+	if(!arpack) energy_sum=Eigen::VectorXd::Zero(this->nStates);
+	else energy_sum=Eigen::VectorXd::Zero(stop);
+	
+	for(int i=0;i<this->NROD;i++){
+		//construct hamiltonian
+		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
+		this->single.init(i+this->random_offset,this->disorder_strength,this->nLow,this->nHigh);
+		this->make_Hnn();
+	
+		if(!arpack){
+			this->EigenDenseEigs();	
+		}else{
+		//****A call to ARPACK++. The fastest of all methods		
+			this->eigenvalues(stop);			
+		}//if arpack
+		
+		for(int j=0;j<this->eigvals.size();j++) energy_sum(j)+=this->eigvals[j]/(1.*this->NROD);
+			 
+	}//NROD
+	write_vector(energy_sum,"energies");	
+
 }
 ///functions which are definitely unique to the torus
 template <class ART>

@@ -80,7 +80,6 @@ protected:
 	void make_lookups();
 	
 	//handy hamiltonian makign stuff
-	void print_eigenstates();
 	int adjust_sign(int a,int b,int state);
 	int adjust_sign(int a,int b, int c, int d, int state);
 	int hasbit(int i,int a);

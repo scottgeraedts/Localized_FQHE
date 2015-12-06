@@ -30,6 +30,7 @@ private:
 	Eigen::MatrixXcd V;
 	MTRand ran;
 	void make_potential_delta(map <string, double> &params);
+	void make_potential_lattice(map <string, double> &params);
 	void make_potential_gaussian(map <string, double> &params);
 };
 

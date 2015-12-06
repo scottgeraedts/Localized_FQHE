@@ -20,7 +20,7 @@ void SingleSolver::init(int seed,double V, int nLow, int nHigh){
 	params["Vstrength"]=1.;
 	params["nLow"]=nLow;
 	params["nHigh"]=nHigh;
-	Potential p_deltas("delta",qbounds,seed,Lx,Ly,params);
+	Potential p_deltas("lattice",qbounds,seed,Lx,Ly,params);
 	make_Hamiltonian(p_deltas);
 	Eigen::MatrixXcd old=Hnn;
 	proj.compute(Hnn);
