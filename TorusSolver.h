@@ -143,7 +143,8 @@ void TorusSolver<ART>::run_finite_energy(){
 				cout<<w<<" "<<temp<<" "<<temp_oldr<<" "<<temp_kl<<endl; //print, just in case this run dies
 //				density_of_states(this->eigvals,DOS[w],energy_grid);
 				for(int k=0;k<stop;k++) energies[i][w*stop+k]=this->eigvals[k];
-				for(int k=0;k<stop;k++) energyout<<this->eigvals[k]<<endl;
+				for(int k=0;k<stop;k++) energyout<<this->eigvals[k]<<" ";
+				energyout<<endl;
 			}
 			
 		}//if arpack
@@ -176,39 +177,26 @@ void TorusSolver<ART>::run_finite_energy(){
 template<class ART>
 void TorusSolver<ART>::run_groundstate(){
 
-	cout<<"starting gs"<<endl;
 	int stop=25;
 	Eigen::VectorXd energy_sum;
 	if(!arpack) energy_sum=Eigen::VectorXd::Zero(this->nStates);
 	else energy_sum=Eigen::VectorXd::Zero(stop);
-	clock_t t;
 	
 	for(int i=0;i<this->NROD;i++){
 		//construct hamiltonian
-	cout<<"init ss"<<endl;
 		if(this->project && this->disordered_projection) this->single.init_deltas_random(i+this->random_offset,this->nLow,this->nHigh);
 		if(this->disorder) this->single.init_whitenoise(i+this->random_offset,this->disorder_strength);
 
-		t=clock();
-	cout<<"make h"<<endl;
 		this->make_Hnn();
-	cout<<"diagonalize"<<endl;
-		t=clock()-t;
-		cout<<"time to make matrix: "<<((float)t)/CLOCKS_PER_SEC<<endl;	
 		
-		t=clock();
 		if(!arpack){
 			this->EigenDenseEigs();	
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
 			this->eigenvalues(stop);			
 		}//if arpack
-	cout<<"print"<<endl;
-		t=clock()-t;
-		cout<<"time to diagonalize matrix: "<<((float)t)/CLOCKS_PER_SEC<<endl;	
 		
 		for(int j=0;j<this->eigvals.size();j++) energy_sum(j)+=this->eigvals[j]/(1.*this->NROD);
-	cout<<"done"<<endl;
 			 
 	}//NROD
 	write_vector(energy_sum,"energies");	

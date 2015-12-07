@@ -156,9 +156,7 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
 template<class ART>
 void ManySolver<ART>::init(){
 	make_states(); 
-	cout<<"interaction cache"<<endl;
 	interaction_cache();
-	cout<<"projection cache"<<endl;
 	if(project && !disordered_projection){
 		projected_interaction_cache();
 	}
