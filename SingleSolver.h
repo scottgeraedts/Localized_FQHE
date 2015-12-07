@@ -44,7 +44,9 @@ public:
 	complex<double> getH(int,int);
 	void switchVstrength();
 	complex<double> evec(int,int);
-	void init(int, double, int, int);
+	void init_deltas_lattice(int );
+	void init_deltas_random(int, int, int);
+	void init_whitenoise(int, double);
 	void printEnergy(int,int);
 
 	SingleSolver () {} 

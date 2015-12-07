@@ -26,22 +26,30 @@ void SingleSolver::testDistance(){
 	}
 }
 
-//the following two functions are designed to be called by a ManySolver
-void SingleSolver::init(int seed,double V, int nLow, int nHigh){
+//the following three functions are designed to be called by a ManySolver
+void SingleSolver::init_deltas_lattice(int nHigh){
+	map <string, double> params;
+	params["Vstrength"]=1.;
+	params["nHigh"]=nHigh;
+	Potential p_deltas("lattice",qbounds,0,Lx,Ly,params);
+	make_Hamiltonian(p_deltas);
+	proj.compute(Hnn);
+}
+void SingleSolver::init_whitenoise(int seed,double V){
 	Vstrength=V;
+	map <string, double> params;
+	params["Vstrength"]=1.;
+	Potential p_gauss("gaussian",qbounds,seed,Lx,Ly,params);
+	make_Hamiltonian(p_gauss);
+}
+void SingleSolver::init_deltas_random(int seed,int nLow, int nHigh){
 	map <string, double> params;
 	params["Vstrength"]=1.;
 	params["nLow"]=nLow;
 	params["nHigh"]=nHigh;
-	Potential p_deltas("lattice",qbounds,seed,Lx,Ly,params);
+	Potential p_deltas("delta",qbounds,seed,Lx,Ly,params);
 	make_Hamiltonian(p_deltas);
-	Eigen::MatrixXcd old=Hnn;
 	proj.compute(Hnn);
-	params["Vstrength"]=1.;
-	Potential p_gauss("gaussian",qbounds,seed,Lx,Ly,params);
-	make_Hamiltonian(p_gauss);
-//	cout<<Hnn<<endl;
-//	cout<<proj.eigenvalues()<<endl;
 }
 void SingleSolver::printEnergy(int nLow, int nHigh){
 	N_trunc=NPhi-nLow-nHigh;

@@ -34,10 +34,15 @@ private:
 template <class ART>
 TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	//stuff unique to the torus
-	this->make_states();
 	double alpha=1.;
 	Ly=sqrt(2.*M_PI*this->NPhi*alpha);//aspect ratio is Lx/Ly=alpha
 	Lx=Ly/alpha;
+	if(this->disorder || this->project){
+		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
+		if(this->project && !this->disordered_projection) this->single.init_deltas_lattice(this->nHigh);
+	}
+	
+	this->init();
 	this->periodic=1;
 	arpack=true;
 
@@ -86,10 +91,14 @@ void TorusSolver<ART>::run_finite_energy(){
 	double temp,temp_oldr, temp_kl;
 	vector<double>::iterator low;
 			
+	ofstream energyout;
+	energyout.open("energies");
+
 	for(int i=0;i<this->NROD;i++){
 		//construct hamiltonian
-		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
-		this->single.init(i+this->random_offset,this->disorder_strength,this->nLow,this->nHigh);
+		if(this->project && this->disordered_projection) this->single.init_deltas_random(i+this->random_offset,this->nLow,this->nHigh);
+		if(this->disorder) this->single.init_whitenoise(i+this->random_offset,this->disorder_strength);
+
 		this->make_Hnn();
 		
 		if(!arpack){
@@ -120,7 +129,6 @@ void TorusSolver<ART>::run_finite_energy(){
 			minE=this->single_energy("SR");
 			double eps;
 			for(int w=0;w<windows.size();w++){
-				t=clock();
 				eps=windows[w]*(maxE-minE)+minE;
 				this->eigenvalues(stop,eps);
 //				for(int k=0;k<stop;k++) cout<<this->eigvals[k]<<endl;
@@ -134,10 +142,13 @@ void TorusSolver<ART>::run_finite_energy(){
 				cout<<w<<" "<<temp<<" "<<temp_oldr<<" "<<temp_kl<<endl; //print, just in case this run dies
 //				density_of_states(this->eigvals,DOS[w],energy_grid);
 				for(int k=0;k<stop;k++) energies[i][w*stop+k]=this->eigvals[k];
+				for(int k=0;k<stop;k++) energyout<<this->eigvals[k]<<" ";
+				energyout<<endl;
 			}
 			
 		}//if arpack
 	}//NROD
+	energyout.close();
 
 //calculated unfolded level spacing ratios, not worrying about this for now
 //	for(int w=0;w<windows.size();w++){
@@ -172,10 +183,11 @@ void TorusSolver<ART>::run_groundstate(){
 	
 	for(int i=0;i<this->NROD;i++){
 		//construct hamiltonian
-		this->single=SingleSolver(this->NPhi,0,Lx,Ly);	
-		this->single.init(i+this->random_offset,this->disorder_strength,this->nLow,this->nHigh);
+		if(this->project && this->disordered_projection) this->single.init_deltas_random(i+this->random_offset,this->nLow,this->nHigh);
+		if(this->disorder) this->single.init_whitenoise(i+this->random_offset,this->disorder_strength);
+
 		this->make_Hnn();
-	
+		
 		if(!arpack){
 			this->EigenDenseEigs();	
 		}else{

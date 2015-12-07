@@ -39,7 +39,7 @@ public:
 protected:
 	int Ne,NPhi,nStates,NPhi2,NPhi3;
 	int nHigh,nLow,NROD,random_offset;
-	int charge,has_charge,disorder,periodic,cache,project,lookups;
+	int charge,has_charge,disorder,periodic,cache,project,lookups, disordered_projection;
 	double disorder_strength,V3overV1;
 	vector<double> HaldaneV;
 	string outfilename;
@@ -52,12 +52,13 @@ protected:
 	virtual ART four_body(int a,int b,int c,int d) =0;//could make virtual
 	virtual int get_charge(int state)=0;//could make virtual
 
-	void init(int, double, int, int, double, double);
-	void make_cache();
-	void second_cache();
+	void init();
+	void interaction_cache();
+	void disorder_cache();
+	void projected_interaction_cache();
 
 	vector<ART> four_body_cache, two_body_cache;
-	vector<ART> final_four_body_cache, final_two_body_cache;
+	vector<ART> projected_four_body_cache;
 	ART four_body_project(int,int,int,int);
 	ART two_body_project(int,int);
 	ART get_interaction(int,int,int,int);
@@ -140,7 +141,9 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
 		cout<<"you can't specify a charge if you want disorder, so I removed the charge conservation"<<endl;
 		has_charge=0;
 		exit(0);
-	}	
+	}
+	disordered_projection=0;
+		
 	HaldaneV=vector<double>(4,0);
 	HaldaneV[1]=1/(1.+V3overV1);
 	HaldaneV[3]=V3overV1/(1.+V3overV1);
@@ -150,6 +153,14 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
 	NPhi3=NPhi*NPhi2;
 }	
 
+template<class ART>
+void ManySolver<ART>::init(){
+	make_states(); 
+	interaction_cache();
+	if(project && !disordered_projection){
+		projected_interaction_cache();
+	}
+}
 ////*********************SETUP FUNCTIONS
 /// A state can be represented by a bit string, 
 //ex. 7=11100000 has electrons in positions 0,1,2, 13=1011 has electron in 0,2,3
@@ -170,7 +181,7 @@ void ManySolver<ART>::make_states(){
 			for(int k=0;k<nLow;k++) //these 4 lines are all that is needed for projection!
 				if( !(i & 1<<k) ) skip=1;
 			for(int k=NPhi-1;k>NPhi-1-nHigh;k--)
-				if(i & i<<k) skip=1;
+				if(i & 1<<k) skip=1;
 			if(!skip){
 				states.push_back(i);
 				j++;
@@ -188,13 +199,13 @@ void ManySolver<ART>::make_states(){
 			}
 		}
 	}	
-//	cout<<"nStates: "<<nStates<<endl;	
+	cout<<"nStates: "<<nStates<<endl;	
 //	for(int i=0;i<nStates;i++)
 //		cout<<(bitset<9>)states[i]<<endl;
 }
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
-	if(cache) make_cache();
+	if(cache) disorder_cache();
 	this->EigenDense=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 	int j;
 	ART temp;
@@ -238,21 +249,14 @@ void ManySolver<ART>::make_Hnn(){
 	}//a
 }
 
-template<>
-inline void ManySolver< complex<double> >::make_cache(){
+template<class ART> 
+void ManySolver<ART>::interaction_cache(){
 	int d;
-	complex<double> temp;
+	ART temp;
 	four_body_cache.resize(pow(NPhi,4));
-	two_body_cache.resize(pow(NPhi,2));
 	
-	for(signed int a=0;a<NPhi;a++){
-		//terms from the disorder potential
-		if(disorder){
-			for(signed int b=0;b<NPhi;b++){		
-				two_body_cache[four_array_map(a,b,0,0)]=single.getH(b,a);
-			}
-		}
-		for(signed int b=a+1;b<NPhi;b++){
+	for(int a=0;a<NPhi;a++){
+		for(int b=a+1;b<NPhi;b++){
 
 //			if(b>a) four_body_cache[four_array_map(a,b,b,a)]=two_body(a,b);		
 			//a+b=c+d, this sets some restrictions on which c and d need to be summed over
@@ -276,31 +280,28 @@ inline void ManySolver< complex<double> >::make_cache(){
 		}
 	}
 }
-
+	
 template<>
-inline void ManySolver<double>::make_cache(){
-	cout<<"can't cache with non-complex data types"<<endl;
-	exit(0);
-}
-
-template<class ART>
-void ManySolver<ART>::second_cache(){
-	ART temp;
-	final_four_body_cache.resize(pow(NPhi,4));
-	final_two_body_cache.resize(pow(NPhi,2));
+inline void ManySolver< complex<double> >::disorder_cache(){
+	complex<double> temp;
+	two_body_cache.resize(pow(NPhi,2));
 	
 	for(signed int a=0;a<NPhi;a++){
 		//terms from the disorder potential
-		if(disorder){
-			for(signed int b=0;b<NPhi;b++){		
-				final_two_body_cache[four_array_map(a,b,0,0)]=get_disorder(a,b);
-			}
+		for(signed int b=0;b<NPhi;b++){		
+			two_body_cache[four_array_map(a,b,0,0)]=single.getH(b,a);
 		}
-		for(signed int b=a+1;b<NPhi;b++){
+	}
+}
 
-//			if(b>a) four_body_cache[four_array_map(a,b,b,a)]=two_body(a,b);		
-			//a+b=c+d, this sets some restrictions on which c and d need to be summed over
-			//on a sphere, there are already restrictions on the possible c, though on the torus more c's are possible (its difficult to a priori determine which ones)
+template<class ART>
+void ManySolver<ART>::projected_interaction_cache(){
+	ART temp;
+	projected_four_body_cache.resize(pow(NPhi,4));
+	
+	for(int a=0;a<NPhi;a++){
+		for(int b=a+1;b<NPhi;b++){
+
 			int c_upper,c_lower;
 			if(periodic){
 				c_upper=NPhi; c_lower=0;
@@ -313,8 +314,7 @@ void ManySolver<ART>::second_cache(){
 			}
 			for(int c=c_lower;c<c_upper;c++){
 				for(int d=0;d<c;d++){
-					if(!project && (a+b)%NPhi != (c+d)%NPhi ) continue;
-					final_four_body_cache[four_array_map(a,b,c,d)]=get_interaction(a,b,c,d);
+					projected_four_body_cache[four_array_map(a,b,c,d)]=four_body_project(a,b,c,d);
 				}
 			}	
 		}
@@ -399,6 +399,7 @@ template<class ART>
 ART ManySolver<ART>::get_interaction(int a,int b,int c, int d){
 	if(!cache) return four_body(a,b,c,d);
 	else if(!project) return four_body_cache[four_array_map(a,b,c,d)];
+	else if(!disordered_projection) return projected_four_body_cache[four_array_map(a,b,c,d)];
 	else return four_body_project(a,b,c,d);
 }
 
@@ -509,85 +510,87 @@ int ManySolver<ART>::lookup_flipped(int i,int a,int b){
 	}
 }
 
-////******MATVECS*****////
-template<class ART>
-void ManySolver<ART>::explicitMultMv(ART* v, ART* w){
-//an old matvec using the matrix Hnn
-//	double alpha=1., beta=0.;
-//	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
-	vector<int> filled;
-	vector<int> empty;
-	int j;
-	for(int i=0;i<nStates;i++) w[i]=0;
-	for(int i=0;i<nStates;i++){ // i is the input state
-		//find all filled and empty terms in input state
-		filled.clear(); empty.clear();
-		for(int m=0;m<NPhi;m++){
-			if (states[i] & 1<<m) filled.push_back(m);
-			else empty.push_back(m);
-		}		
-		//loop through filled and empty states to generate disorder-tunnelling term
-		if(disorder){
-			for(int f=0;f<filled.size();f++){
-				for(int e=0;e<empty.size();e++){
-					if(filled[f]<nLow || empty[e] > NPhi-nHigh-1) continue;
-					j=lookup_flipped(i,filled[f],empty[e]);
-					w[j]+=(double)adjust_sign(filled[f],empty[e],states[i]) * final_two_body_cache[four_array_map(filled[f],empty[e],0,0)]*v[i];
-				}
-			}
-		}
-		//loop through filled states to generate disorder diagonal term
-		if(disorder){
-			for(int f=0;f<filled.size();f++){
-				w[i]+=final_two_body_cache[four_array_map(filled[f],filled[f],0,0)]*v[i];
-			}
-		}
-		//loop through all pairs of filled states to generate diagonal term
-		for(int f1=0;f1<filled.size();f1++){
-			for(int f2=f1+1;f2<filled.size();f2++){
-				w[i]+=final_four_body_cache[four_array_map(filled[f1],filled[f2],filled[f2],filled[f1])]*v[i];
-			}
-		}
-		//loop through filled states^2 + empty states to generate four-body one-particle tunnelling terms
-		int a,b,c,d;
-		if(project){
-			for(int f1=0;f1<filled.size();f1++){
-				if(filled[f1]<nLow) continue;
-				for(int f2=0;f2<filled.size();f2++){
-					if(f1==f2) continue;
-					for(int e=0;e<empty.size();e++){
-						if(empty[e] > NPhi-nHigh-1) continue;
-						j=lookup_flipped(i,filled[f1],empty[e]);
-						if(filled[f2]<filled[f1]){ a=filled[f2]; b=filled[f1]; }
-						else{ a=filled[f1]; b=filled[f2]; }
-						if(filled[f2]<empty[e]){ d=filled[f2]; c=empty[e]; }
-						else{ d=empty[e]; c=filled[f2]; }
-				
-						w[j]+=(double)adjust_sign(a,b,c,d,states[i])*final_four_body_cache[four_array_map(a,b,c,d)]*v[i];
-					}
-				}
-			}
-		}
-		//loop through filled states^2 empty states^2 to generate four body tunnelling
-		for(int f1=0;f1<filled.size();f1++){
-			if(filled[f1]<nLow) continue;
-			for(int f2=f1+1;f2<filled.size();f2++){
-				if(filled[f2]<nLow) continue;
-				for(int e1=0;e1<empty.size();e1++){
-					if(empty[e1]>NPhi-nHigh-1) continue;
-					for(int e2=e1+1;e2<empty.size();e2++){
-						if(empty[e2] > NPhi-nHigh-1) continue;
-						if(!project && (filled[f1]+filled[f2])%NPhi!=(empty[e1]+empty[e2])%NPhi) continue;
-						j=lookup_flipped(i,filled[f1],filled[f2],empty[e2],empty[e1]);
-						//cout<<i<<" "<<j<<" "<<filled[f1]<<" "<<filled[f2]<<" "<<empty[e1]<<" "<<empty[e2]<<" "<<final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]<<endl;
-						w[j]+=(double)adjust_sign(filled[f1],filled[f2],empty[e2],empty[e1],states[i])*final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]*v[i];
-					}
-				}
-			}
-		}
-	}
-		
-} //  MultMv.
+//////******MATVECS*****////
+//template<class ART>
+//void ManySolver<ART>::explicitMultMv(ART* v, ART* w){
+//	cout<<"this function is broken!"<<endl;
+//	exit(0);
+////an old matvec using the matrix Hnn
+////	double alpha=1., beta=0.;
+////	cblas_zgemv(CblasColMajor, CblasNoTrans, nStates, nStates, &alpha, Hnn.data(), nStates, v, 1, &beta, w, 1);
+//	vector<int> filled;
+//	vector<int> empty;
+//	int j;
+//	for(int i=0;i<nStates;i++) w[i]=0;
+//	for(int i=0;i<nStates;i++){ // i is the input state
+//		//find all filled and empty terms in input state
+//		filled.clear(); empty.clear();
+//		for(int m=0;m<NPhi;m++){
+//			if (states[i] & 1<<m) filled.push_back(m);
+//			else empty.push_back(m);
+//		}		
+//		//loop through filled and empty states to generate disorder-tunnelling term
+//		if(disorder){
+//			for(int f=0;f<filled.size();f++){
+//				for(int e=0;e<empty.size();e++){
+//					if(filled[f]<nLow || empty[e] > NPhi-nHigh-1) continue;
+//					j=lookup_flipped(i,filled[f],empty[e]);
+//					w[j]+=(double)adjust_sign(filled[f],empty[e],states[i]) * final_two_body_cache[four_array_map(filled[f],empty[e],0,0)]*v[i];
+//				}
+//			}
+//		}
+//		//loop through filled states to generate disorder diagonal term
+//		if(disorder){
+//			for(int f=0;f<filled.size();f++){
+//				w[i]+=final_two_body_cache[four_array_map(filled[f],filled[f],0,0)]*v[i];
+//			}
+//		}
+//		//loop through all pairs of filled states to generate diagonal term
+//		for(int f1=0;f1<filled.size();f1++){
+//			for(int f2=f1+1;f2<filled.size();f2++){
+//				w[i]+=final_four_body_cache[four_array_map(filled[f1],filled[f2],filled[f2],filled[f1])]*v[i];
+//			}
+//		}
+//		//loop through filled states^2 + empty states to generate four-body one-particle tunnelling terms
+//		int a,b,c,d;
+//		if(project){
+//			for(int f1=0;f1<filled.size();f1++){
+//				if(filled[f1]<nLow) continue;
+//				for(int f2=0;f2<filled.size();f2++){
+//					if(f1==f2) continue;
+//					for(int e=0;e<empty.size();e++){
+//						if(empty[e] > NPhi-nHigh-1) continue;
+//						j=lookup_flipped(i,filled[f1],empty[e]);
+//						if(filled[f2]<filled[f1]){ a=filled[f2]; b=filled[f1]; }
+//						else{ a=filled[f1]; b=filled[f2]; }
+//						if(filled[f2]<empty[e]){ d=filled[f2]; c=empty[e]; }
+//						else{ d=empty[e]; c=filled[f2]; }
+//				
+//						w[j]+=(double)adjust_sign(a,b,c,d,states[i])*final_four_body_cache[four_array_map(a,b,c,d)]*v[i];
+//					}
+//				}
+//			}
+//		}
+//		//loop through filled states^2 empty states^2 to generate four body tunnelling
+//		for(int f1=0;f1<filled.size();f1++){
+//			if(filled[f1]<nLow) continue;
+//			for(int f2=f1+1;f2<filled.size();f2++){
+//				if(filled[f2]<nLow) continue;
+//				for(int e1=0;e1<empty.size();e1++){
+//					if(empty[e1]>NPhi-nHigh-1) continue;
+//					for(int e2=e1+1;e2<empty.size();e2++){
+//						if(empty[e2] > NPhi-nHigh-1) continue;
+//						if(!project && (filled[f1]+filled[f2])%NPhi!=(empty[e1]+empty[e2])%NPhi) continue;
+//						j=lookup_flipped(i,filled[f1],filled[f2],empty[e2],empty[e1]);
+//						//cout<<i<<" "<<j<<" "<<filled[f1]<<" "<<filled[f2]<<" "<<empty[e1]<<" "<<empty[e2]<<" "<<final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]<<endl;
+//						w[j]+=(double)adjust_sign(filled[f1],filled[f2],empty[e2],empty[e1],states[i])*final_four_body_cache[four_array_map(filled[f1],filled[f2],empty[e2],empty[e1])]*v[i];
+//					}
+//				}
+//			}
+//		}
+//	}
+//		
+//} //  MultMv.
 
 //template<class ART>
 //void ManySolver<ART>::MultMv(ART * v, ART * w){

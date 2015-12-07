@@ -48,14 +48,14 @@ void Potential::make_potential_lattice(map <string, double> &params){
 	double qx,qy;
 	complex<double> temp(0,0);
 	int nHigh=floor(params["nHigh"]+0.1);
+	int squareroot=sqrt(nHigh);
+	cout<<squareroot<<endl;
 	double Vstrength=params["Vstrength"];
 //	cout<<"ns: "<<nLow<<" "<<nHigh<<endl;
 	for(int x=0;x<nHigh;x++){
-		for(int y=0;y<nHigh;y++){
-			xloc.push_back( (Lx*x)/(1.*nHigh) ); 
-			yloc.push_back( (Ly*y)/(1.*nHigh) );
+			xloc.push_back( (Lx* (x%squareroot) )/(1.*nHigh) ); 
+			yloc.push_back( (Ly* (x/squareroot) )/(1.*nHigh) );
 			sign.push_back(1);//list of locations and signs of delta functions
-		}
 	}
 	for(int i=0;i<2*qbounds+1;i++){
 		for(int j=0;j<=qbounds;j++){
