@@ -258,13 +258,16 @@ void ManySolver<ART>::make_Hnn_six(){
 		for(int b=a+1;b<NPhi;b++){
 			for(int c=b+1;c<NPhi;c++){
 				for(int d=0;d<NPhi;d++){
-					for(int e=0;e<NPhi;e++){
+					for(int e=d+1;e<NPhi;e++){
 						f=a+b+c-d-e;
-						if(f>=NPhi || f<e) continue;
+						if(f>=NPhi || f<=e) continue;
 						temp=six_body(a,b,c,d,e,f);
 						for(int i=0;i<nStates;i++){
+							//cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<e<<" "<<f<<" "<<(bitset<7>)states[i]<<" "<<endl;
 							if( (states[i] & 1<<a) && (states[i] & 1<<b) && (states[i] & 1<<c) && 
-							!(states[i] & 1<<d) && !(states[i] & 1<<e) && !(states[i] & 1<<f) ){
+							(!(states[i] & 1<<d) || d==a || d==b || d==c) && 
+							(!(states[i] & 1<<e) || e==a || e==b || e==c) && 
+							(!(states[i] & 1<<f) || f==a || f==b || f==c) ){
 								j=lookup_flipped(i,states,6,a,b,c,d,e,f);
 								this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,e,f,states[i]) ) * temp;
 							}
