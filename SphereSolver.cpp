@@ -10,17 +10,17 @@ SphereSolver::SphereSolver(int x):ManySolver<double>(){
 
 	make_VL_haldane();
 	make_Hnn();
-	make_Hnn_six();
+//	make_Hnn_six();
 	cout<<EigenDense<<endl;
 	EigenDenseEigs();
 	for(int i=0;i<nStates;i++) 	
-		cout<<setprecision(7)<<"energies: "<<(eigvals[i]-pow(Ne,2)/sqrt((NPhi-1)*2))/(1.*Ne)<<endl;
-//		cout<<setprecision(7)<<"energies: "<<eigvals[i]<<endl;
+		cout<<setprecision(7)<<"energies: "<<eigvals[i]<<endl;
+//		cout<<setprecision(7)<<"energies: "<<(eigvals[i]-pow(Ne,2)/sqrt((NPhi-1)*2))/(1.*Ne)<<endl;
 
-//	for(int j=0;j<nStates;j++){
-//		for(int i=0;i<nStates;i++) cout<<eigvecs[j][i]<<" "<<(bitset<10>)states[i]<<endl;
-//		cout<<endl;
-//	}
+	for(int j=0;j<nStates;j++){
+		for(int i=0;i<nStates;i++) cout<<eigvecs[j][i]<<" "<<(bitset<10>)states[i]<<endl;
+		cout<<endl;
+	}
 }
 
 //compute formula 3.224 from jain. 2Q=NPhi-1, R=sqrt(Q). NPhite only need elements with (L-2Q)%2==1
@@ -39,7 +39,7 @@ void SphereSolver::make_VL_coulomb(){
 }
 void SphereSolver::make_VL_haldane(){
 	VL=vector<double>(NPhi,0);
-	//VL[NPhi-1-1]=1.;
+	VL[NPhi-1-1]=1.;
 }	
 double SphereSolver::two_body(int a,int b){
 	cout<<"two body was called!"<<endl;
@@ -60,15 +60,16 @@ double SphereSolver::four_body(int a,int b,int c,int d){
 	}		
 	return out;
 }
-double SphereSolver::six_body(int a, int b, int c, int d, int e, int f){
+double SphereSolver::six_body(int a, int b, int c){
 	double out=0;
 	for(int dJ1=2*NPhi-8;dJ1<2*(NPhi-1);dJ1+=4){
 		if(dJ1<abs( 2*(a+b)-2*(NPhi-1))) continue;
-		for(int dJ2=2*NPhi-8;dJ2<2*(NPhi-1);dJ2+=4){
-			if(dJ2<abs( 2*(d+e)-2*(NPhi-1))) continue;
-			out+=ClebschGordan(NPhi-1, NPhi-1, 2*a-(NPhi-1),2*b-(NPhi-1), dJ1)*ClebschGordan(NPhi-1, NPhi-1, 2*d-(NPhi-1), 2*e-(NPhi-1) , dJ2)*
-					ClebschGordan(NPhi-1, dJ1, 2*c-(NPhi-1),2*(a+b)-2*(NPhi-1), 3*NPhi-9 )*ClebschGordan(NPhi-1, dJ2, 2*f-(NPhi-1), 2*(d+e)-2*(NPhi-1) , 3*NPhi-9);
-		}
+		//for(int dJ2=2*NPhi-8;dJ2<2*(NPhi-1);dJ2+=4){
+		//int dJ2=dJ1;
+		//	if(dJ2<abs( 2*(d+e)-2*(NPhi-1))) continue;
+			out+=ClebschGordan(NPhi-1, NPhi-1, 2*a-(NPhi-1),2*b-(NPhi-1), dJ1)*ClebschGordan(NPhi-1, dJ1, 2*c-(NPhi-1),2*(a+b)-2*(NPhi-1), 3*NPhi-9 );
+			//*ClebschGordan(NPhi-1, NPhi-1, 2*d-(NPhi-1), 2*e-(NPhi-1) , dJ2)*ClebschGordan(NPhi-1, dJ2, 2*f-(NPhi-1), 2*(d+e)-2*(NPhi-1) , 3*NPhi-9);
+		//}
 	}
 	return out;
 }

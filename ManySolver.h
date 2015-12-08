@@ -49,7 +49,7 @@ protected:
 	
 	virtual ART two_body(int a,int b) =0;//could make virtual
 	virtual ART four_body(int a,int b,int c,int d) =0;//could make virtual
-	virtual ART six_body(int a, int b, int c, int d, int e, int f);
+	virtual ART six_body(int a, int b, int c);
 	virtual int get_charge(int state)=0;//could make virtual
 
 	void init();
@@ -261,7 +261,8 @@ void ManySolver<ART>::make_Hnn_six(){
 					for(int e=d+1;e<NPhi;e++){
 						f=a+b+c-d-e;
 						if(f>=NPhi || f<=e) continue;
-						temp=six_body(a,b,c,d,e,f);
+						temp=(six_body(a,b,c)-six_body(b,a,c)+six_body(b,c,a)-six_body(c,b,a)+six_body(c,a,b)-six_body(a,c,b));
+						temp*=(six_body(d,e,f)-six_body(e,d,f)+six_body(e,f,d)-six_body(f,e,d)+six_body(f,d,e)-six_body(d,f,e));
 						for(int i=0;i<nStates;i++){
 							//cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<e<<" "<<f<<" "<<(bitset<7>)states[i]<<" "<<endl;
 							if( (states[i] & 1<<a) && (states[i] & 1<<b) && (states[i] & 1<<c) && 
@@ -498,7 +499,7 @@ int ManySolver<ART>::adjust_sign(int a, int b, int c, int d, int e, int f, int s
 }
 
 template<class ART>
-ART ManySolver<ART>::six_body(int a, int b, int c, int d, int e, int f){
+ART ManySolver<ART>::six_body(int a, int b, int c){
 	cout<<"six body terms not implemented in this geometry"<<endl;
 	exit(0);
 	return 0;
