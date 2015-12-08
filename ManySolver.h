@@ -45,8 +45,6 @@ protected:
 	string outfilename;
 
 	vector<int > states;
-//	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> Hnn;//ManySolver in Landau basis
-//	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic> > es;
 	
 	virtual ART two_body(int a,int b) =0;//could make virtual
 	virtual ART four_body(int a,int b,int c,int d) =0;//could make virtual
@@ -76,8 +74,6 @@ protected:
 
 	//lookup stuff
 	vector< vector<int> > lookup_table_four,lookup_table_two;
-	int lookup_flipped(int i,int a,int b,int c,int d);
-	int lookup_flipped(int i,int a,int b);
 	void make_lookups();
 	
 	//handy hamiltonian makign stuff
@@ -205,7 +201,7 @@ void ManySolver<ART>::make_states(){
 }
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
-	if(cache) disorder_cache();
+	if(cache && disorder) disorder_cache();
 	this->EigenDense=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 	int j;
 	ART temp;
@@ -218,7 +214,7 @@ void ManySolver<ART>::make_Hnn(){
 				temp=get_disorder(a,b);
 				for(int i=0;i<(signed)nStates;i++){
 					if ((states[i] & 1<<a) && (b==a || (!( states[i] & 1<<b) && a>=nLow && a<NPhi-nHigh && b>=nLow && b<NPhi-nHigh) ) ){
-						j=lookup_flipped(i,a,b);
+						j=lookup_flipped(i,states,2,a,b);
 						this->EigenDense(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
 					}
 				}
@@ -239,7 +235,7 @@ void ManySolver<ART>::make_Hnn(){
 						 ( (!(states[i] & 1<<d) && d>=nLow && d<NPhi-nHigh) || a==d || b==d) && 
 						 ( (a>=nLow && a<NPhi-nHigh) || a==c ||a==d) &&
 						 ( (b<NPhi-nHigh && b>=nLow) || b==c ||b==d)  )  {
-							j=lookup_flipped(i,a,b,c,d);
+							j=lookup_flipped(i,states,4,a,b,c,d);
 							this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}
 					}
@@ -293,7 +289,11 @@ inline void ManySolver< complex<double> >::disorder_cache(){
 		}
 	}
 }
-
+template<>
+inline void ManySolver< double >::disorder_cache(){
+	cout<<"can't do disorder on a sphere!"<<endl;
+	exit(0);
+}
 template<class ART>
 void ManySolver<ART>::projected_interaction_cache(){
 	ART temp;
@@ -455,13 +455,13 @@ void ManySolver<ART>::make_lookups(){
 	for(int i=0;i<nStates;i++){
 		for(int a=nLow;a<NPhi-nHigh;a++){
 			for(int b=nLow;b<NPhi-nHigh;b++){
-				lookup_table_two[i][four_array_map(a,b,0,0)]=lookup_flipped(i,a,b);
+				lookup_table_two[i][four_array_map(a,b,0,0)]=lookup_flipped(i,states,2,a,b);
 			}
 			for(int b=a+1;b<NPhi-nHigh;b++){
 				for(int c=nLow;c<NPhi-nHigh;c++){
 					for(int d=nLow;d<c;d++){
 						if(!project && (a+b)%NPhi != (c+d) % NPhi) continue;
-						lookup_table_four[i][four_array_map(a,b,c,d)]=lookup_flipped(i,a,b,c,d);
+						lookup_table_four[i][four_array_map(a,b,c,d)]=lookup_flipped(i,states,4,a,b,c,d);
 					}
 				}
 			}
@@ -470,46 +470,6 @@ void ManySolver<ART>::make_lookups(){
 	lookups=1;
 }
 	
-template<class ART>
-int ManySolver<ART>::lookup_flipped(int i,int a,int b,int c,int d){
-//given a bitstring, finds its index in the bitstring array
-	if(lookups) return lookup_table_four[i][four_array_map(a,b,c,d)];
-	else{
-		int compare=states[i];
-		compare=compare ^ 1<<a;
-		compare=compare ^ 1<<b;
-		compare=compare ^ 1<<c;
-		compare=compare ^ 1<<d;
-		vector<int>::iterator low;
-		low=lower_bound(states.begin(),states.end(),compare);
-		if(low!=states.end()) return (low-states.begin());
-		else{
-			cout<<"error in lookup_flipped: "<<(bitset<30>)states[i]<<" "<<(bitset<30>)compare<<" "<<a<<" "<<b<<" "<<c<<" "<<d<<endl;
-			exit(0);	
-			return 0;
-		}
-	}
-}
-
-template<class ART>
-int ManySolver<ART>::lookup_flipped(int i,int a,int b){
-//given a bitstring, finds its index in the bitstring array
-	if(lookups) return lookup_table_two[i][four_array_map(a,b,0,0)];
-	else{
-		int compare=states[i];
-		compare=compare ^ 1<<a;
-		compare=compare ^ 1<<b;
-		vector<int>::iterator low;
-		low=lower_bound(states.begin(),states.end(),compare);
-		if(low!=states.end()) return (low-states.begin());
-		else{
-			cout<<"error in lookup_flipped: "<<(bitset<30>)states[i]<<" "<<(bitset<30>)compare<<" "<<a<<" "<<b<<endl;
-			exit(0);
-			return 0;	
-		}
-	}
-}
-
 //////******MATVECS*****////
 //template<class ART>
 //void ManySolver<ART>::explicitMultMv(ART* v, ART* w){

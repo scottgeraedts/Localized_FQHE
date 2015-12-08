@@ -13,11 +13,12 @@ SphereSolver::SphereSolver(int x):ManySolver<double>(){
 	make_Hnn();
 	EigenDenseEigs();
 	for(int i=0;i<nStates;i++) 	
-		cout<<setprecision(7)<<"energies: "<<(eigvals[i]-pow(Ne,2)/sqrt((NPhi-1)*2))/(1.*Ne)<<endl;
-	for(int j=0;j<nStates;j++){
-		for(int i=0;i<nStates;i++) cout<<eigvecs[j][i]<<" "<<(bitset<10>)states[i]<<endl;
-		cout<<endl;
-	}
+		cout<<setprecision(7)<<"energies: "<<eigvals[i]<<endl;
+//		cout<<setprecision(7)<<"energies: "<<(eigvals[i]-pow(Ne,2)/sqrt((NPhi-1)*2))/(1.*Ne)<<endl;
+//	for(int j=0;j<nStates;j++){
+//		for(int i=0;i<nStates;i++) cout<<eigvecs[j][i]<<" "<<(bitset<10>)states[i]<<endl;
+//		cout<<endl;
+//	}
 }
 
 //compute formula 3.224 from jain. 2Q=NPhi-1, R=sqrt(Q). NPhite only need elements with (L-2Q)%2==1
