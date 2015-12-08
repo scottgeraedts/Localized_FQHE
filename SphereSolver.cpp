@@ -8,13 +8,16 @@ SphereSolver::SphereSolver(int x):ManySolver<double>(){
 	if (NPhi%2==1) Qeven=1;
 	else Qeven=0;
 
-	make_VL_haldane();
+	make_VL_coulomb();
 	cout<<nStates<<" "<<Ne<<" "<<NPhi<<" "<<charge<<" "<<has_charge<<endl;
 	make_Hnn();
+//	make_Hnn_six();
+	
 	EigenDenseEigs();
 	for(int i=0;i<nStates;i++) 	
-		cout<<setprecision(7)<<"energies: "<<eigvals[i]<<endl;
-//		cout<<setprecision(7)<<"energies: "<<(eigvals[i]-pow(Ne,2)/sqrt((NPhi-1)*2))/(1.*Ne)<<endl;
+		cout<<setprecision(7)<<"energies: "<<(eigvals[i]-pow(Ne,2)/sqrt((NPhi-1)*2))/(1.*Ne)<<endl;
+//		cout<<setprecision(7)<<"energies: "<<eigvals[i]<<endl;
+
 //	for(int j=0;j<nStates;j++){
 //		for(int i=0;i<nStates;i++) cout<<eigvecs[j][i]<<" "<<(bitset<10>)states[i]<<endl;
 //		cout<<endl;
@@ -45,7 +48,7 @@ double SphereSolver::two_body(int a,int b){
 	for(int L=abs(a+b-(NPhi-1));L<=(NPhi-1);L++){
 		if( (L-(NPhi-1))%2==0) continue;
 //		cout<<"***"<<a<<" "<<b<<" "<<L<<" "<<ClebschGordan(a,b,L)<<endl;
-		out+=2.*VL[L]*pow(ClebschGordan(a,b,L,NPhi),2);
+	//	out+=2.*VL[L]*pow(ClebschGordan(a,b,L,NPhi),2);
 	}	
 	return out;
 }
@@ -54,9 +57,15 @@ double SphereSolver::four_body(int a,int b,int c,int d){
 	double out=0;
 	for(int L=abs(a+b-(NPhi-1));L<=(NPhi-1);L++){
 		if( (L-(NPhi-1))%2==1) continue;
-		out+=2*VL[L]*ClebschGordan(a,b,L,NPhi)*ClebschGordan(d,c,L,NPhi);
+		out+=2*VL[L]*ClebschGordan(NPhi-1, NPhi-1, 2*a-(NPhi-1),2*b-(NPhi-1), 2*L)*ClebschGordan(NPhi-1, NPhi-1, 2*d-(NPhi-1), 2*c-(NPhi-1) , 2*L);
 	}		
 	return out;
+}
+double SphereSolver::six_body(int a, int b, int c, int d, int e, int f){
+	double out=0;
+	return out;
+
+
 }
 
 int SphereSolver::get_charge(int b){

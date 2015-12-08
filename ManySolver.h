@@ -33,6 +33,7 @@ public:
 
 	void ZeroHnn();
 	void make_Hnn();
+	void make_Hnn_six();
 	void disorderHnn();
 	void make_states();
 	
@@ -48,6 +49,7 @@ protected:
 	
 	virtual ART two_body(int a,int b) =0;//could make virtual
 	virtual ART four_body(int a,int b,int c,int d) =0;//could make virtual
+	virtual ART six_body(int a, int b, int c, int d, int e, int f);
 	virtual int get_charge(int state)=0;//could make virtual
 
 	void init();
@@ -79,6 +81,7 @@ protected:
 	//handy hamiltonian makign stuff
 	int adjust_sign(int a,int b,int state);
 	int adjust_sign(int a,int b, int c, int d, int state);
+	int adjust_sign(int a,int b, int c, int d, int e, int f, int state);
 	int hasbit(int i,int a);
 	int state_to_index(int state);
 	double V_Coulomb(double qx,double qy);
@@ -245,6 +248,33 @@ void ManySolver<ART>::make_Hnn(){
 	}//a
 }
 
+//same as above, but does a six-body term for getting pfaffians
+//note: this function is not compatible with projection or periodic BC
+template<class ART>
+void ManySolver<ART>::make_Hnn_six(){
+	int f,j;
+	ART temp;
+	for(int a=0;a<NPhi;a++){
+		for(int b=a+1;b<NPhi;b++){
+			for(int c=b+1;c<NPhi;c++){
+				for(int d=0;d<NPhi;d++){
+					for(int e=0;e<NPhi;e++){
+						f=a+b+c-d-e;
+						if(f>=NPhi || f<e) continue;
+						temp=six_body(a,b,c,d,e,f);
+						for(int i=0;i<nStates;i++){
+							if( (states[i] & 1<<a) && (states[i] & 1<<b) && (states[i] & 1<<c) && 
+							!(states[i] & 1<<d) && !(states[i] & 1<<e) && !(states[i] & 1<<f) ){
+								j=lookup_flipped(i,states,6,a,b,c,d,e,f);
+								this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,e,f,states[i]) ) * temp;
+							}
+						}//for loop
+					}//e
+				}//d
+			}//c
+		}//b
+	}//a
+}
 template<class ART> 
 void ManySolver<ART>::interaction_cache(){
 	int d;
@@ -445,7 +475,31 @@ int ManySolver<ART>::adjust_sign(int a,int b,int c,int d,int state){
 		if(state & 1<<i && i!=a && i!=b) sign*=-1;
 	return sign;	
 }
+template<class ART>
+int ManySolver<ART>::adjust_sign(int a, int b, int c, int d, int e, int f, int state){
+	int sign=1;
+	int start=a, end=b;
+	if (a>b){ start=b; end=a;}
+	for(int i=start+1;i<end;i++)
+		if(state & 1<<i && i!=c && i!=d && i!=e && i!=f) sign*=-1;
+	start=c, end=d;
+	if (c>d){ start=d; end=c;}
+	for(int i=start+1;i<end;i++)
+		if(state & 1<<i && i!=a && i!=b && i!=e && i!=f) sign*=-1;
+	start=e, end=f;
+	if (e>f){ start=f; end=e;}
+	for(int i=start+1;i<end;i++)
+		if(state & 1<<i && i!=a && i!=b && i!=c && i!=d) sign*=-1;
 
+	return sign;	
+}
+
+template<class ART>
+ART ManySolver<ART>::six_body(int a, int b, int c, int d, int e, int f){
+	cout<<"six body terms not implemented in this geometry"<<endl;
+	exit(0);
+	return 0;
+}
 template<class ART>
 void ManySolver<ART>::make_lookups(){
 	vector<int> temp(NPhi3*NPhi,0);
