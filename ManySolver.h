@@ -49,13 +49,14 @@ protected:
 	
 	virtual ART two_body(int a,int b) =0;//could make virtual
 	virtual ART four_body(int a,int b,int c,int d) =0;//could make virtual
-	virtual ART six_body(int a, int b, int c);
+	virtual ART six_body(int a, int b, int c, int ,int ,int );
 	virtual int get_charge(int state)=0;//could make virtual
 
 	void init();
 	void interaction_cache();
 	void disorder_cache();
 	void projected_interaction_cache();
+	void ph_symmetrize();
 
 	vector<ART> four_body_cache, two_body_cache;
 	vector<ART> projected_four_body_cache;
@@ -199,8 +200,8 @@ void ManySolver<ART>::make_states(){
 		}
 	}	
 	cout<<"nStates: "<<nStates<<endl;	
-//	for(int i=0;i<nStates;i++)
-//		cout<<(bitset<9>)states[i]<<endl;
+	for(int i=0;i<nStates;i++)
+		cout<<(bitset<10>)states[i]<<endl;
 }
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
@@ -256,13 +257,15 @@ void ManySolver<ART>::make_Hnn_six(){
 	ART temp;
 	for(int a=0;a<NPhi;a++){
 		for(int b=a+1;b<NPhi;b++){
+//			if(b==a) continue;
 			for(int c=b+1;c<NPhi;c++){
+//				if(c==a || c==b) continue;
 				for(int d=0;d<NPhi;d++){
 					for(int e=d+1;e<NPhi;e++){
+//						if(e==d) continue;
 						f=a+b+c-d-e;
-						if(f>=NPhi || f<=e) continue;
-						temp=(six_body(a,b,c)-six_body(b,a,c)+six_body(b,c,a)-six_body(c,b,a)+six_body(c,a,b)-six_body(a,c,b));
-						temp*=(six_body(d,e,f)-six_body(e,d,f)+six_body(e,f,d)-six_body(f,e,d)+six_body(f,d,e)-six_body(d,f,e));
+						if(f>=NPhi || f==d || f==e || f<e) continue;
+						temp=six_body(a,b,c,d,e,f);//+six_body(b,c,a)+six_body(c,a,b);
 						for(int i=0;i<nStates;i++){
 							//cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<e<<" "<<f<<" "<<(bitset<7>)states[i]<<" "<<endl;
 							if( (states[i] & 1<<a) && (states[i] & 1<<b) && (states[i] & 1<<c) && 
@@ -270,14 +273,48 @@ void ManySolver<ART>::make_Hnn_six(){
 							(!(states[i] & 1<<e) || e==a || e==b || e==c) && 
 							(!(states[i] & 1<<f) || f==a || f==b || f==c) ){
 								j=lookup_flipped(i,states,6,a,b,c,d,e,f);
-								this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,e,f,states[i]) ) * temp;
+								this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,e,f,states[i]) ) * temp * permute_sign(3,a,b,c)*permute_sign(3,d,e,f);
 							}
+//							//the ph-conjugate term
+//							if( !(states[i] & 1<<a) && !(states[i] & 1<<b) && !(states[i] & 1<<c) && 
+//							((states[i] & 1<<d) || d==a || d==b || d==c) && 
+//							((states[i] & 1<<e) || e==a || e==b || e==c) && 
+//							((states[i] & 1<<f) || f==a || f==b || f==c) ){
+//								j=lookup_flipped(i,states,6,a,b,c,d,e,f);
+//								this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,e,f,states[i]) ) * temp;
+//							}
 						}//for loop
 					}//e
 				}//d
 			}//c
 		}//b
 	}//a
+}
+
+template<class ART>
+void ManySolver<ART>::ph_symmetrize(){
+	if(Ne!=NPhi/2)
+		cout<<"warning: trying to symmetrize on a strange number of fluxes"<<endl;
+	Eigen::MatrixXd temp(nStates,nStates);
+	vector<int> conj_dict(nStates,0);
+	int conj;
+	for(int i=0;i<nStates;i++){
+		conj=states[i];
+		for(int k=0;k<NPhi;k++) conj=conj ^ 1<<k;
+		for(int j=0;j<nStates;j++){
+			if(states[j]==conj) conj_dict[i]=j;
+			continue;
+		}
+	}	
+	for(int i=0;i<nStates;i++) cout<<(bitset<12>)states[i]<<" "<<(bitset<12>)states[conj_dict[i]]<<endl;
+	
+	for(int i=0;i<nStates;i++){
+		for(int j=0;j<nStates;j++){
+			temp(i,j)=this->EigenDense(i,j)+this->EigenDense(conj_dict[i],conj_dict[j]);
+		}
+	}
+	this->EigenDense=temp;
+	
 }
 template<class ART> 
 void ManySolver<ART>::interaction_cache(){
@@ -499,7 +536,7 @@ int ManySolver<ART>::adjust_sign(int a, int b, int c, int d, int e, int f, int s
 }
 
 template<class ART>
-ART ManySolver<ART>::six_body(int a, int b, int c){
+ART ManySolver<ART>::six_body(int a, int b, int c, int d, int e, int f){
 	cout<<"six body terms not implemented in this geometry"<<endl;
 	exit(0);
 	return 0;
