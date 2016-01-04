@@ -33,6 +33,7 @@ public:
 
 	void ZeroHnn();
 	void make_Hnn();
+	void make_Hnn_six();
 	void disorderHnn();
 	void make_states();
 	
@@ -45,17 +46,17 @@ protected:
 	string outfilename;
 
 	vector<int > states;
-//	Eigen::Matrix<ART,Eigen::Dynamic, Eigen::Dynamic> Hnn;//ManySolver in Landau basis
-//	Eigen::SelfAdjointEigenSolver<Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic> > es;
 	
 	virtual ART two_body(int a,int b) =0;//could make virtual
 	virtual ART four_body(int a,int b,int c,int d) =0;//could make virtual
+	virtual ART six_body(int a, int b, int c, int ,int ,int );
 	virtual int get_charge(int state)=0;//could make virtual
 
 	void init();
 	void interaction_cache();
 	void disorder_cache();
 	void projected_interaction_cache();
+	void ph_symmetrize();
 
 	vector<ART> four_body_cache, two_body_cache;
 	vector<ART> projected_four_body_cache;
@@ -76,13 +77,12 @@ protected:
 
 	//lookup stuff
 	vector< vector<int> > lookup_table_four,lookup_table_two;
-	int lookup_flipped(int i,int a,int b,int c,int d);
-	int lookup_flipped(int i,int a,int b);
 	void make_lookups();
 	
 	//handy hamiltonian makign stuff
 	int adjust_sign(int a,int b,int state);
 	int adjust_sign(int a,int b, int c, int d, int state);
+	int adjust_sign(int a,int b, int c, int d, int e, int f, int state);
 	int hasbit(int i,int a);
 	int state_to_index(int state);
 	double V_Coulomb(double qx,double qy);
@@ -199,13 +199,13 @@ void ManySolver<ART>::make_states(){
 			}
 		}
 	}	
-	cout<<"nStates: "<<nStates<<endl;	
+//	cout<<"nStates: "<<nStates<<endl;	
 //	for(int i=0;i<nStates;i++)
-//		cout<<(bitset<9>)states[i]<<endl;
+//		cout<<(bitset<12>)states[i]<<endl;
 }
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
-	if(cache) disorder_cache();
+	if(cache && disorder) disorder_cache();
 	this->EigenDense=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 	int j;
 	ART temp;
@@ -218,7 +218,7 @@ void ManySolver<ART>::make_Hnn(){
 				temp=get_disorder(a,b);
 				for(int i=0;i<(signed)nStates;i++){
 					if ((states[i] & 1<<a) && (b==a || (!( states[i] & 1<<b) && a>=nLow && a<NPhi-nHigh && b>=nLow && b<NPhi-nHigh) ) ){
-						j=lookup_flipped(i,a,b);
+						j=lookup_flipped(i,states,2,a,b);
 						this->EigenDense(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
 					}
 				}
@@ -239,7 +239,7 @@ void ManySolver<ART>::make_Hnn(){
 						 ( (!(states[i] & 1<<d) && d>=nLow && d<NPhi-nHigh) || a==d || b==d) && 
 						 ( (a>=nLow && a<NPhi-nHigh) || a==c ||a==d) &&
 						 ( (b<NPhi-nHigh && b>=nLow) || b==c ||b==d)  )  {
-							j=lookup_flipped(i,a,b,c,d);
+							j=lookup_flipped(i,states,4,a,b,c,d);
 							this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}
 					}
@@ -249,6 +249,73 @@ void ManySolver<ART>::make_Hnn(){
 	}//a
 }
 
+//same as above, but does a six-body term for getting pfaffians
+//note: this function is not compatible with projection or periodic BC
+template<class ART>
+void ManySolver<ART>::make_Hnn_six(){
+	int f,j;
+	ART temp;
+	for(int a=0;a<NPhi;a++){
+		for(int b=a+1;b<NPhi;b++){
+//			if(b==a) continue;
+			for(int c=b+1;c<NPhi;c++){
+//				if(c==a || c==b) continue;
+				for(int d=0;d<NPhi;d++){
+					for(int e=d+1;e<NPhi;e++){
+//						if(e==d) continue;
+						f=a+b+c-d-e;
+						if(f>=NPhi || f==d || f==e || f<e) continue;
+						temp=six_body(a,b,c,d,e,f);//+six_body(b,c,a)+six_body(c,a,b);
+						for(int i=0;i<nStates;i++){
+							//cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<e<<" "<<f<<" "<<(bitset<7>)states[i]<<" "<<endl;
+							if( (states[i] & 1<<a) && (states[i] & 1<<b) && (states[i] & 1<<c) && 
+							(!(states[i] & 1<<d) || d==a || d==b || d==c) && 
+							(!(states[i] & 1<<e) || e==a || e==b || e==c) && 
+							(!(states[i] & 1<<f) || f==a || f==b || f==c) ){
+								j=lookup_flipped(i,states,6,a,b,c,d,e,f);
+								this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,e,f,states[i]) ) * temp * permute_sign(3,a,b,c)*permute_sign(3,d,e,f);
+							}
+//							//the ph-conjugate term
+//							if( !(states[i] & 1<<a) && !(states[i] & 1<<b) && !(states[i] & 1<<c) && 
+//							((states[i] & 1<<d) || d==a || d==b || d==c) && 
+//							((states[i] & 1<<e) || e==a || e==b || e==c) && 
+//							((states[i] & 1<<f) || f==a || f==b || f==c) ){
+//								j=lookup_flipped(i,states,6,a,b,c,d,e,f);
+//								this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,e,f,states[i]) ) * temp;
+//							}
+						}//for loop
+					}//e
+				}//d
+			}//c
+		}//b
+	}//a
+}
+
+template<class ART>
+void ManySolver<ART>::ph_symmetrize(){
+	if(Ne!=NPhi/2)
+		cout<<"warning: trying to symmetrize on a strange number of fluxes"<<endl;
+	Eigen::MatrixXd temp(nStates,nStates);
+	vector<int> conj_dict(nStates,0);
+	int conj;
+	for(int i=0;i<nStates;i++){
+		conj=states[i];
+		for(int k=0;k<NPhi;k++) conj=conj ^ 1<<k;
+		for(int j=0;j<nStates;j++){
+			if(states[j]==conj) conj_dict[i]=j;
+			continue;
+		}
+	}	
+//	for(int i=0;i<nStates;i++) cout<<(bitset<12>)states[i]<<" "<<(bitset<12>)states[conj_dict[i]]<<endl;
+	
+	for(int i=0;i<nStates;i++){
+		for(int j=0;j<nStates;j++){
+			temp(i,j)=this->EigenDense(i,j)+this->EigenDense(conj_dict[i],conj_dict[j]);
+		}
+	}
+	this->EigenDense=temp;
+	
+}
 template<class ART> 
 void ManySolver<ART>::interaction_cache(){
 	int d;
@@ -293,7 +360,11 @@ inline void ManySolver< complex<double> >::disorder_cache(){
 		}
 	}
 }
-
+template<>
+inline void ManySolver< double >::disorder_cache(){
+	cout<<"can't do disorder on a sphere!"<<endl;
+	exit(0);
+}
 template<class ART>
 void ManySolver<ART>::projected_interaction_cache(){
 	ART temp;
@@ -445,7 +516,31 @@ int ManySolver<ART>::adjust_sign(int a,int b,int c,int d,int state){
 		if(state & 1<<i && i!=a && i!=b) sign*=-1;
 	return sign;	
 }
+template<class ART>
+int ManySolver<ART>::adjust_sign(int a, int b, int c, int d, int e, int f, int state){
+	int sign=1;
+	int start=a, end=b;
+	if (a>b){ start=b; end=a;}
+	for(int i=start+1;i<end;i++)
+		if(state & 1<<i && i!=c && i!=d && i!=e && i!=f) sign*=-1;
+	start=c, end=d;
+	if (c>d){ start=d; end=c;}
+	for(int i=start+1;i<end;i++)
+		if(state & 1<<i && i!=a && i!=b && i!=e && i!=f) sign*=-1;
+	start=e, end=f;
+	if (e>f){ start=f; end=e;}
+	for(int i=start+1;i<end;i++)
+		if(state & 1<<i && i!=a && i!=b && i!=c && i!=d) sign*=-1;
 
+	return sign;	
+}
+
+template<class ART>
+ART ManySolver<ART>::six_body(int a, int b, int c, int d, int e, int f){
+	cout<<"six body terms not implemented in this geometry"<<endl;
+	exit(0);
+	return 0;
+}
 template<class ART>
 void ManySolver<ART>::make_lookups(){
 	vector<int> temp(NPhi3*NPhi,0);
@@ -455,13 +550,13 @@ void ManySolver<ART>::make_lookups(){
 	for(int i=0;i<nStates;i++){
 		for(int a=nLow;a<NPhi-nHigh;a++){
 			for(int b=nLow;b<NPhi-nHigh;b++){
-				lookup_table_two[i][four_array_map(a,b,0,0)]=lookup_flipped(i,a,b);
+				lookup_table_two[i][four_array_map(a,b,0,0)]=lookup_flipped(i,states,2,a,b);
 			}
 			for(int b=a+1;b<NPhi-nHigh;b++){
 				for(int c=nLow;c<NPhi-nHigh;c++){
 					for(int d=nLow;d<c;d++){
 						if(!project && (a+b)%NPhi != (c+d) % NPhi) continue;
-						lookup_table_four[i][four_array_map(a,b,c,d)]=lookup_flipped(i,a,b,c,d);
+						lookup_table_four[i][four_array_map(a,b,c,d)]=lookup_flipped(i,states,4,a,b,c,d);
 					}
 				}
 			}
@@ -470,46 +565,6 @@ void ManySolver<ART>::make_lookups(){
 	lookups=1;
 }
 	
-template<class ART>
-int ManySolver<ART>::lookup_flipped(int i,int a,int b,int c,int d){
-//given a bitstring, finds its index in the bitstring array
-	if(lookups) return lookup_table_four[i][four_array_map(a,b,c,d)];
-	else{
-		int compare=states[i];
-		compare=compare ^ 1<<a;
-		compare=compare ^ 1<<b;
-		compare=compare ^ 1<<c;
-		compare=compare ^ 1<<d;
-		vector<int>::iterator low;
-		low=lower_bound(states.begin(),states.end(),compare);
-		if(low!=states.end()) return (low-states.begin());
-		else{
-			cout<<"error in lookup_flipped: "<<(bitset<30>)states[i]<<" "<<(bitset<30>)compare<<" "<<a<<" "<<b<<" "<<c<<" "<<d<<endl;
-			exit(0);	
-			return 0;
-		}
-	}
-}
-
-template<class ART>
-int ManySolver<ART>::lookup_flipped(int i,int a,int b){
-//given a bitstring, finds its index in the bitstring array
-	if(lookups) return lookup_table_two[i][four_array_map(a,b,0,0)];
-	else{
-		int compare=states[i];
-		compare=compare ^ 1<<a;
-		compare=compare ^ 1<<b;
-		vector<int>::iterator low;
-		low=lower_bound(states.begin(),states.end(),compare);
-		if(low!=states.end()) return (low-states.begin());
-		else{
-			cout<<"error in lookup_flipped: "<<(bitset<30>)states[i]<<" "<<(bitset<30>)compare<<" "<<a<<" "<<b<<endl;
-			exit(0);
-			return 0;	
-		}
-	}
-}
-
 //////******MATVECS*****////
 //template<class ART>
 //void ManySolver<ART>::explicitMultMv(ART* v, ART* w){
@@ -674,4 +729,60 @@ inline void ManySolver<double>::expand(int state, double coeff, int o, vector<do
 	exit(0);
 }
 
+template<class ART>
+void ManySolver<ART>::plot_spectrum(string name){
+
+	unsigned int ti,tj;
+	Eigen::SelfAdjointEigenSolver< Eigen::Matrix<ART,-1,-1> > rs;
+	vector<int> trunc_states2;
+	vector<ART> evec=this->eigvecs[0];
+
+	ofstream outfile;
+	outfile.open(name.c_str());
+
+	this->ee_setup(0,NPhi/2,states);
+	int tsize=this->trunc_states.size();
+	Eigen::Matrix<ART,-1,-1> rho=Eigen::Matrix<ART,-1,-1>::Zero(tsize,tsize);
+
+//	this->ee_compute_rho(evec,rho,states);
+//	for(int i=0;i<tsize;i++) cout<<(bitset<8>)this->trunc_states[i]<<endl;
+//	cout<<rho<<endl;
+//	rs.compute(rho);
+//	cout<<rs.eigenvalues()<<endl;
+
+	for(int n=0;n<NPhi/2;n++){
+		for(int c=0;c<1000;c++){
+
+			trunc_states2.clear();
+			for(int i=0;i<tsize;i++)
+				if(get_charge(this->trunc_states[i])==c && count_bits(this->trunc_states[i])==n ) trunc_states2.push_back(this->trunc_states[i]);
+			
+			if(trunc_states2.size()==0) continue;
+				
+			rho=Eigen::Matrix<ART,-1,-1>::Zero(tsize,tsize);
+			for(unsigned int i=0;i<evec.size();i++){
+				for(unsigned int j=i;j<evec.size();j++){
+					if( ( states[i] & this->trunc_part) == ( states[j] & this->trunc_part) ){
+						for(ti=0;ti<trunc_states2.size();ti++)
+							if( ( states[i] & ~this->trunc_part) == trunc_states2[ti]) break;
+						for(tj=0;tj<trunc_states2.size();tj++)
+							if( ( states[j] & ~this->trunc_part) == trunc_states2[tj]) break;
+						if(ti==tsize || tj==tsize){
+							cout<<ti<<" "<<tj<<endl;
+							cout<<(bitset<16>)states[i]<<" "<<(bitset<16>)states[j]<<" "<<(bitset<16>)this->trunc_part<<endl;
+						}
+						rho(ti,tj)+=this->safe_mult(evec[i],evec[j]);
+						if(ti!=tj) rho(tj,ti)+=this->safe_mult(evec[j],evec[i]);
+					}//if truncated parts are equal
+				}
+			}//loop over original states
+//			cout<<"rho for n="<<n<<" c="<<c<<endl;
+//			cout<<rho.topLeftCorner(trunc_states2.size(),trunc_states2.size())<<endl;
+			rs.compute(rho.topLeftCorner(trunc_states2.size(),trunc_states2.size()));
+			for(int i=0;i<trunc_states2.size();i++) 
+				if(abs(rs.eigenvalues()(i))>1e-8) outfile<<n<<" "<<c<<" "<<rs.eigenvalues()(i)<<endl;	
+		}//charge
+	}
+	outfile.close();				
+}	
 #endif
