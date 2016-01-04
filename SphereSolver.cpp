@@ -4,59 +4,61 @@ SphereSolver::SphereSolver(int x):ManySolver<double>(){
 //	NPhi=3*Ne-tshift+1;
 
 	periodic=0;
-	make_states();
 	dQ=NPhi-1; //2*Q, useful in a lot of formulae
-
-//	make_VL_haldane();
-//	make_Hnn();
-////	make_Hnn_six();
-////	ph_symmetrize();
-////	cout<<EigenDense<<endl;
-//	EigenDenseEigs();
-//	for(int i=0;i<nStates;i++) 	
-//		cout<<setprecision(7)<<"energies: "<<eigvals[i]-eigvals[0]<<endl;
-////		cout<<setprecision(7)<<"energies: "<<(eigvals[i]-pow(Ne,2)/sqrt((NPhi-1)*2))/(1.*Ne)<<endl;
-
-//	cout<<"eigenstate: "<<endl;
-//	double factor,smallest=1000;
-//	vector<double> factored_vec(nStates);
-//	for(int i=0;i<nStates;i++){
-//		factor=1;
-//		for(int s=0;s<NPhi;s++) 
-//			if(states[i] & 1<<s) factor*=sqrt( comb(NPhi-1,s) );	
-//		factored_vec[i]=eigvecs[0][i]*factor;
-//		cout<<factored_vec[i]<<" "<<(bitset<10>)states[i]<<endl;
-//		if(abs(factored_vec[i])<smallest) smallest=abs(factored_vec[i]);
-//	}
-//	cout<<"factored eigenstate"<<endl;
-//	for(int i=0;i<nStates;i++){
-//		cout<<factored_vec[i]/smallest<<" "<<(bitset<10>)states[i]<<endl;
-//	}
-	
-	cout<<"---testing 4-body---"<<endl;
 	make_VL_Tpfaff();
-	make_Hnn();
-//	cout<<EigenDense<<endl;
-	EigenDenseEigs();
-	for(int i=0;i<nStates;i++) 	
-		cout<<setprecision(7)<<"energies: "<<eigvals[i]-eigvals[0]<<endl;
+//	make_VL_haldane();
+//	make_VL_coulomb();
 
-	cout<<"eigenstate: "<<endl;
-	double factor,smallest=1000;
-	vector<double> factored_vec(nStates);
-	for(int i=0;i<nStates;i++){
-		factor=1;
-		for(int s=0;s<NPhi;s++) 
-			if(states[i] & 1<<s) factor*=sqrt( comb(NPhi-1,s) );	
-		factored_vec[i]=eigvecs[0][i]*factor;
-		cout<<factored_vec[i]<<" "<<(bitset<12>)states[i]<<endl;
-		if(abs(factored_vec[i])<smallest && abs(factored_vec[i])>1e-6) smallest=abs(factored_vec[i]);
+	ground_state();		
+}
+void SphereSolver::energy_spectrum(){
+	for(int c=Ne%2;c<=Ne*(Ne+1-Ne%2);c+=2){
+		charge=c;
+		make_states();
+
+		make_Hnn();
+//		make_Hnn_six();
+//		ph_symmetrize();
+
+		EigenDenseEigs();
+		for(int i=0;i<nStates;i++) 	
+			cout<<setprecision(7)<<charge<<" "<<eigvals[i]<<endl;
+
 	}
-	cout<<"factored eigenstate"<<endl;
-	for(int i=0;i<nStates;i++){
-		cout<<factored_vec[i]/smallest<<"\t"<<(bitset<12>)states[i]<<endl;
-	}
-	
+}
+
+void SphereSolver::ground_state(){
+	make_states();
+
+	make_Hnn();
+//		make_Hnn_six();
+//		ph_symmetrize();
+
+//	EigenDenseEigs();
+	eigenvalues(10,-100);
+	for(int i=0;i<eigvals.size();i++) 	
+		cout<<setprecision(7)<<"energy: "<<eigvals[i]<<endl;
+
+		Eigen::VectorXd eigen_eigvec(eigvecs[0].size());
+		for(int i=0;i<eigvecs[0].size();i++) eigen_eigvec(i)=eigvecs[0][i];
+		cout<<"eigenstate precision: "<<calcVarEigen(eigen_eigvec)<<endl;
+		cout<<"eigenstate: "<<endl;
+		double factor,smallest=1000;
+		vector<double> factored_vec(nStates);
+		for(int i=0;i<nStates;i++){
+			factor=1;
+			for(int s=0;s<NPhi;s++) 
+				if(states[i] & 1<<s) factor*=sqrt( comb(NPhi-1,s) );	
+			factored_vec[i]=eigvecs[0][i]*factor;
+			cout<<eigvecs[0][i]<<" "<<(bitset<24>)states[i]<<endl;
+			if(abs(factored_vec[i])<smallest && abs(factored_vec[i])>1e-6) smallest=abs(factored_vec[i]);
+		}
+		cout<<"factored eigenstate"<<endl;
+		for(int i=0;i<nStates;i++){
+			cout<<factored_vec[i]/smallest<<"\t"<<(bitset<24>)states[i]<<endl;
+		}
+
+///	plot_spectrum("spect");
 
 }
 //compute formula 3.224 from jain. 2Q=NPhi-1, R=sqrt(Q). NPhite only need elements with (L-2Q)%2==1
@@ -75,7 +77,7 @@ void SphereSolver::make_VL_coulomb(){
 }
 void SphereSolver::make_VL_haldane(){
 	VL=vector<double>(NPhi,0);
-	VL[NPhi-1-1]=1.;
+	VL[NPhi-1-1]=0.;
 }
 void SphereSolver::make_VL_Tpfaff(){
 // \sum_M C^{JQ}_{m_1+m_2,M}**2, assuming m1+m2=0 (though it should be the same for any m1+m2
@@ -89,13 +91,12 @@ void SphereSolver::make_VL_Tpfaff(){
 			temp3_2+=4*sqrt( (dJ+1)*(dJ_2+1))*(2*dQ-6+1)*Wigner6j(dQ,dQ,dJ,dQ,3*dQ-6,2*dQ-6)*Wigner6j(dQ,dQ,dJ_2,dQ,3*dQ-6,2*dQ-6);
 		}
 	}
-	cout<<"temps: "<<temp1<<" "<<temp3<<endl;
 	for(int M=-dQ;M<=dQ;M+=2){
 		if(abs(M) > 3*dQ-6) continue;
 		V1+=pow(ClebschGordan(2*dQ-2,dQ,0,M,3*dQ-6),2)*(1+4*temp1*lil_sign(dQ+1) + temp1_2);
 		V3+=pow(ClebschGordan(2*dQ-6,dQ,0,M,3*dQ-6),2)*(1+4*temp3*lil_sign(dQ+1) + temp3_2);
 	}
-	cout<<"calculated pseudopotentials: V1="<<V1<<" V3="<<V3<<endl;
+//	cout<<setprecision(12)<<"calculated pseudopotentials: V1="<<V1<<" V3="<<V3<<endl;
 	VL[dQ-1]=V1;
 	VL[dQ-3]=V3;
 }	
@@ -121,10 +122,6 @@ double SphereSolver::four_body(int a,int b,int c,int d){
 double SphereSolver::six_body(int a, int b, int c, int d, int e, int f){
 	double outfirst=0, outsecond=0;
 
-	int sign; //an overall - sign may be needed whenever the basis is changed
-	if(dQ%2==0) sign=-1;
-	else sign=1; 
-	
 	vector<int> invals(6,0);
 	invals[0]=a; invals[1]=b; invals[2]=c; invals[3]=d; invals[4]=e; invals[5]=f;
 	for(int i=0;i<6;i++) invals[i]=2*invals[i]-(NPhi-1); //convert an m from 0 to 2Q+1 to one that goes from -Q to Q
@@ -226,12 +223,12 @@ double SphereSolver::six_body(int a, int b, int c, int d, int e, int f){
 	}	
 	return outfirst*outsecond;	
 }
-
+//actually returns twice the charge to prevent me having to deal with fractions
 int SphereSolver::get_charge(int b){
 	int out=0;
 	for (int i=0;i<NPhi;i++)
 		if(b & 1<<i)  out+=2*i-NPhi+1;	
-	return out/2;
+	return out;
 }
 int main(int argc, char** argv) {
 

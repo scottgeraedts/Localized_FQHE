@@ -5,6 +5,8 @@
 class SphereSolver:ManySolver<double>{
 public:
 	SphereSolver(int);
+	void energy_spectrum();
+	void ground_state();
 	
 private:
 	int dQ;

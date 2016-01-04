@@ -199,9 +199,9 @@ void ManySolver<ART>::make_states(){
 			}
 		}
 	}	
-	cout<<"nStates: "<<nStates<<endl;	
-	for(int i=0;i<nStates;i++)
-		cout<<(bitset<10>)states[i]<<endl;
+//	cout<<"nStates: "<<nStates<<endl;	
+//	for(int i=0;i<nStates;i++)
+//		cout<<(bitset<12>)states[i]<<endl;
 }
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
@@ -306,7 +306,7 @@ void ManySolver<ART>::ph_symmetrize(){
 			continue;
 		}
 	}	
-	for(int i=0;i<nStates;i++) cout<<(bitset<12>)states[i]<<" "<<(bitset<12>)states[conj_dict[i]]<<endl;
+//	for(int i=0;i<nStates;i++) cout<<(bitset<12>)states[i]<<" "<<(bitset<12>)states[conj_dict[i]]<<endl;
 	
 	for(int i=0;i<nStates;i++){
 		for(int j=0;j<nStates;j++){
@@ -729,4 +729,60 @@ inline void ManySolver<double>::expand(int state, double coeff, int o, vector<do
 	exit(0);
 }
 
+template<class ART>
+void ManySolver<ART>::plot_spectrum(string name){
+
+	unsigned int ti,tj;
+	Eigen::SelfAdjointEigenSolver< Eigen::Matrix<ART,-1,-1> > rs;
+	vector<int> trunc_states2;
+	vector<ART> evec=this->eigvecs[0];
+
+	ofstream outfile;
+	outfile.open(name.c_str());
+
+	this->ee_setup(0,NPhi/2,states);
+	int tsize=this->trunc_states.size();
+	Eigen::Matrix<ART,-1,-1> rho=Eigen::Matrix<ART,-1,-1>::Zero(tsize,tsize);
+
+//	this->ee_compute_rho(evec,rho,states);
+//	for(int i=0;i<tsize;i++) cout<<(bitset<8>)this->trunc_states[i]<<endl;
+//	cout<<rho<<endl;
+//	rs.compute(rho);
+//	cout<<rs.eigenvalues()<<endl;
+
+	for(int n=0;n<NPhi/2;n++){
+		for(int c=0;c<1000;c++){
+
+			trunc_states2.clear();
+			for(int i=0;i<tsize;i++)
+				if(get_charge(this->trunc_states[i])==c && count_bits(this->trunc_states[i])==n ) trunc_states2.push_back(this->trunc_states[i]);
+			
+			if(trunc_states2.size()==0) continue;
+				
+			rho=Eigen::Matrix<ART,-1,-1>::Zero(tsize,tsize);
+			for(unsigned int i=0;i<evec.size();i++){
+				for(unsigned int j=i;j<evec.size();j++){
+					if( ( states[i] & this->trunc_part) == ( states[j] & this->trunc_part) ){
+						for(ti=0;ti<trunc_states2.size();ti++)
+							if( ( states[i] & ~this->trunc_part) == trunc_states2[ti]) break;
+						for(tj=0;tj<trunc_states2.size();tj++)
+							if( ( states[j] & ~this->trunc_part) == trunc_states2[tj]) break;
+						if(ti==tsize || tj==tsize){
+							cout<<ti<<" "<<tj<<endl;
+							cout<<(bitset<16>)states[i]<<" "<<(bitset<16>)states[j]<<" "<<(bitset<16>)this->trunc_part<<endl;
+						}
+						rho(ti,tj)+=this->safe_mult(evec[i],evec[j]);
+						if(ti!=tj) rho(tj,ti)+=this->safe_mult(evec[j],evec[i]);
+					}//if truncated parts are equal
+				}
+			}//loop over original states
+//			cout<<"rho for n="<<n<<" c="<<c<<endl;
+//			cout<<rho.topLeftCorner(trunc_states2.size(),trunc_states2.size())<<endl;
+			rs.compute(rho.topLeftCorner(trunc_states2.size(),trunc_states2.size()));
+			for(int i=0;i<trunc_states2.size();i++) 
+				if(abs(rs.eigenvalues()(i))>1e-8) outfile<<n<<" "<<c<<" "<<rs.eigenvalues()(i)<<endl;	
+		}//charge
+	}
+	outfile.close();				
+}	
 #endif
