@@ -11,6 +11,14 @@ SingleSolver::SingleSolver(int _NPhi, int N_deltas, double _Lx, double _Ly, int 
 	double meshstart=0.2/sqrt(1.*NPhi);
 	energies=Eigen::VectorXd::LinSpaced(energy_mesh,-0.1*meshstart,0.1*meshstart);	
 	spacings=Eigen::VectorXd::Zero(energy_mesh);
+	init_whitenoise(0,qbounds);
+	for(int i=0;i<NPhi;i++){
+		cout<<i<<" "<<abs(Hnn(0,i))<<" ";
+		cout<<abs(Hnn(1,i))<<" ";
+		cout<<abs(Hnn(2,i))<<" ";
+		cout<<abs(Hnn(3,i))<<" ";
+		cout<<endl;
+	}
 }
 void SingleSolver::testDistance(){	
 	map <string, double> params;
@@ -34,6 +42,16 @@ void SingleSolver::init_deltas_lattice(int nHigh){
 	Potential p_deltas("lattice",qbounds,0,Lx,Ly,params);
 	make_Hamiltonian(p_deltas);
 	proj.compute(Hnn);
+}
+//the following three functions are designed to be called by a ManySolver
+void SingleSolver::init_hole(double xoffset, double yoffset){
+	map <string, double> params;
+	params["Vstrength"]=1.;
+	params["nHigh"]=1;
+	params["xoffset"]=xoffset;
+	params["yoffset"]=yoffset;
+	Potential p_deltas("lattice",qbounds,0,Lx,Ly,params);
+	make_Hamiltonian(p_deltas);
 }
 void SingleSolver::init_whitenoise(int seed,double V){
 	Vstrength=V;

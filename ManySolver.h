@@ -485,6 +485,7 @@ inline complex<double> ManySolver< complex<double> >::get_disorder(int a, int b)
 //a Coulomb interaction
 template<class ART>
 double ManySolver<ART>::V_Coulomb(double qx,double qy){
+//	return 1./(sqrt(qx*qx+qy*qy)*NPhi);
 	return 1./(sqrt(qx*qx+qy*qy)*NPhi);
 }
 

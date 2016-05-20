@@ -13,7 +13,7 @@ using namespace std;
 using Eigen::MatrixXcd;
 
 const int DT=1; //fineness of grid used when threading boudary conditions
-const int CUTOFF=2; //max number of times you can hop around the torus in the y direction
+const int CUTOFF=8; //max number of times you can hop around the torus in the y direction
 
 class Potential{
 public:
@@ -45,6 +45,7 @@ public:
 	void switchVstrength();
 	complex<double> evec(int,int);
 	void init_deltas_lattice(int );
+	void init_hole(double x,double y );
 	void init_deltas_random(int, int, int);
 	void init_whitenoise(int, double);
 	void printEnergy(int,int);
