@@ -257,71 +257,102 @@ void TorusSolver<ART>::berry_phase(){
 	this->disorder=1;
 	this->project=0;
 
+	double A=0.4;
+	double side=sqrt(A);
 	//set up locations of the holes
-	vector<double> holes_x,holes_y;
-	for(double x=0;x<.006;x+=0.002){
-		holes_x.push_back(x);
-		holes_y.push_back(0);
-	}
-	int nds=holes_x.size();
+	ofstream sumout("err_v_step",ios::app);
+//	int steps=2;
+	int step_array[]={15,20,30,45,70,105};
+	for(int steps_c=0;steps_c<6;steps_c++){
+		int steps=step_array[steps_c];
+		double step=side/(1.*steps);
+		vector<double> holes_x,holes_y;
+		for(int x=0;x<steps;x++){
+			holes_x.push_back(x*step);
+			holes_y.push_back(0);
+		}
+		for(int y=0;y<this->NROD*steps;y++){
+			holes_x.push_back(side);
+			holes_y.push_back(y*step);
+		}
+		for(int x=steps;x>0;x--){
+			holes_x.push_back(x*step);
+			holes_y.push_back(this->NROD*side);
+		}
+		for(double y=this->NROD*steps;y>0;y--){
+			holes_x.push_back(0);
+			holes_y.push_back(y*step);
+		}
+		int nds=holes_x.size();
 	
-	vector<Eigen::MatrixXcd> overlaps(nds,Eigen::MatrixXcd(3,3));
-	vector<Eigen::VectorXcd> psi0(3),psi1(3),psi2(3);
-	Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es;
+		vector<Eigen::MatrixXcd> overlaps(nds,Eigen::MatrixXcd(3,3));
+		vector<Eigen::VectorXcd> psi0(3),psi1(3),psi2(3);
+		Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es;
 	
-	ofstream sout("states");
-	for(int i=0;i<this->nStates;i++) sout<<this->states[i]<<endl;
-	sout.close();
-	
-	stringstream filename;
-	cout<<this->nStates<<endl;	
-	for(int b=0;b<nds;b++){
-		this->single.init_hole(holes_x[b],holes_y[b]);
-		this->make_Hnn();
-		this->EigenDenseEigs();
-		for(int i=0;i<3;i++) psi1[i]=Std_To_Eigen(this->eigvecs[i]);
+		stringstream filename;
+		cout<<this->nStates<<endl;	
+		for(int b=0;b<nds;b++){
+			this->single.init_hole(holes_x[b],holes_y[b]);
+			this->make_Hnn();
+			this->EigenDenseEigs();
+			for(int i=0;i<3;i++) psi1[i]=Std_To_Eigen(this->eigvecs[i]);
 
-		if(b>0){
-			for(int gs1=0;gs1<3;gs1++){
-				for(int gs2=0;gs2<3;gs2++){
-					overlaps[b](gs1,gs2)=psi2[gs1].dot(psi1[gs2].conjugate());
+			if(b>0){
+				for(int gs1=0;gs1<3;gs1++){
+					for(int gs2=0;gs2<3;gs2++){
+						overlaps[b](gs1,gs2)=psi1[gs1].dot(psi2[gs2]);
+					}
 				}
 			}
-		}
-		if(b==nds-1){
-			for(int gs1=0;gs1<3;gs1++){
-				for(int gs2=0;gs2<3;gs2++){
-					overlaps[0](gs1,gs2)=psi1[gs1].dot(psi0[gs2].conjugate());
+			if(b==nds-1){
+				for(int gs1=0;gs1<3;gs1++){
+					for(int gs2=0;gs2<3;gs2++){
+						overlaps[0](gs1,gs2)=psi0[gs1].dot(psi1[gs2]);
+					}
 				}
-			}
-		}			
-		psi2=psi1;
-		if(b==0) psi0=psi1;
-		//print the energies to make sure that they make sense
-		for(int i=0;i<5;i++) cout<<this->eigvals[i]<<" ";
-		cout<<endl<<endl;
+			}			
+			psi2=psi1;
+			if(b==0) psi0=psi1;
+			//print the energies to make sure that they make sense
+	//		for(int i=0;i<5;i++) cout<<this->eigvals[i]<<" ";
+	//		cout<<endl<<endl;
 
-		filename.str("");
-		filename<<"evec"<<holes_x[b];
-		ofstream evec(filename.str().c_str());
-		for(int i=0;i<this->nStates;i++){
-			for(int j=0;j<3;j++) evec<<real(this->eigvecs[j][i])<<" "<<imag(this->eigvecs[j][i])<<" ";
-			evec<<endl;
 		}
-		evec.close();
+		Eigen::MatrixXcd total=Eigen::MatrixXcd::Identity(3,3);
+		double sum;
+		vector<double> running_phase(3,0);
+		for(int b=0;b<nds;b++){
+			total=overlaps[b]*total;
+	//		cout<<overlaps[b]<<endl;
+			cout<<setprecision(15)<<holes_x[b]<<" "<<holes_y[b]<<endl;
+			es.compute(overlaps[b]);
+			sum=0;
+			for(int i=0;i<3;i++){
+				cout<<abs(es.eigenvalues()(i))<<" "<<arg(es.eigenvalues()(i))<<endl;
+				sum+=arg(es.eigenvalues()(i));
+				running_phase[i]+=arg(es.eigenvalues()(i));
+			}
+			cout<<"sum: "<<sum<<endl;
+		}
+		cout<<"total:"<<endl;
+		cout<<total<<endl;
+		es.compute(total);
+		sum=0;
+		double sum2=0;
+		for(int i=0;i<3;i++){
+			cout<<abs(es.eigenvalues()(i))<<" "<<arg(es.eigenvalues()(i))<<" "<<running_phase[i]<<endl;
+			sum+=arg(es.eigenvalues()(i));
+			sum2+=running_phase[i];
+		}		
+		cout<<"sum: "<<sum<<" "<<sum2<<endl;
+		while(sum>M_PI) sum-=2*M_PI;
+		while(sum<-M_PI) sum+=2*M_PI;
+		sumout<<steps<<" "<<step<<" ";
+		for(int i=0;i<3;i++) sumout<<abs(es.eigenvalues()(i))<<" "<<arg(es.eigenvalues()(i))<<" ";
+		sumout<<total.norm();
+		sumout<<endl;
 	}
-	Eigen::MatrixXcd total=Eigen::MatrixXcd::Identity(3,3);
-	for(int b=0;b<nds;b++){
-		total=overlaps[b]*total;
-		cout<<overlaps[b]<<endl;
-		es.compute(overlaps[b]);
-		for(int i=0;i<3;i++) cout<<abs(es.eigenvalues()(i))<<" "<<arg(es.eigenvalues()(i))<<endl;
-	}
-	cout<<"total:"<<endl;
-	cout<<total<<endl;
-	es.compute(total);
-	for(int i=0;i<3;i++) cout<<abs(es.eigenvalues()(i))<<" "<<arg(es.eigenvalues()(i))<<endl;
-	
+	sumout.close();
 }
 
 ///functions which are definitely unique to the torus
