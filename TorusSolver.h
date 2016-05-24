@@ -46,7 +46,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	this->periodic=1;
 	arpack=true;
 
-	run_groundstate();
+	run_finite_energy();
 }
 
 template<class ART>

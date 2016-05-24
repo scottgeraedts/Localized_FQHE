@@ -5,8 +5,8 @@ SphereSolver::SphereSolver(int x):ManySolver<double>(){
 
 	periodic=0;
 	dQ=NPhi-1; //2*Q, useful in a lot of formulae
-	make_VL_Tpfaff();
-//	make_VL_haldane();
+//	make_VL_Tpfaff();
+	make_VL_haldane();
 //	make_VL_coulomb();
 
 	ground_state();		
@@ -31,11 +31,10 @@ void SphereSolver::ground_state(){
 	make_states();
 
 	make_Hnn();
-//		make_Hnn_six();
+		make_Hnn_six();
 //		ph_symmetrize();
-
-//	EigenDenseEigs();
-	eigenvalues(10,-100);
+	EigenDenseEigs();
+//	eigenvalues(10,-100);
 	for(int i=0;i<eigvals.size();i++) 	
 		cout<<setprecision(7)<<"energy: "<<eigvals[i]<<endl;
 
