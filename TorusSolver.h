@@ -195,7 +195,7 @@ void TorusSolver<ART>::run_groundstate(){
 
 	haldane=false;
 	arpack=false;
-	this->disorder=1;
+	this->disorder=0;
 	this->project=0;
 	this->NROD=1;
 	int stop=25;
@@ -217,9 +217,8 @@ void TorusSolver<ART>::run_groundstate(){
 	for(int i=0;i<this->NROD;i++){
 		//construct hamiltonian
 		if(this->project && this->disordered_projection) this->single.init_deltas_random(i+this->random_offset,this->nLow,this->nHigh);
-		//if(this->disorder) this->single.init_whitenoise(i+this->random_offset,this->disorder_strength);
+		if(this->disorder) this->single.init_whitenoise(i+this->random_offset,this->disorder_strength);
 
-		this->single.init_deltas_lattice(1);
 		this->make_Hnn();
 		
 		if(!arpack){
@@ -232,22 +231,27 @@ void TorusSolver<ART>::run_groundstate(){
 		for(int j=0;j<this->eigvals.size();j++) energy_sum(j)+=this->eigvals[j]/(1.*this->NROD);
 			 
 	}//NROD
-	write_vector(energy_sum,"energies");
-	cout<<"energy: "<<this->eigvals[0]<<" "<<self_energy()<<" "<<this->eigvals[0]/(1.*this->Ne)+self_energy()<<endl;
-	haldane=false;
-	this->make_Hnn();
-	Eigen::VectorXcd tempvec=Std_To_Eigen(this->eigvecs[0]);
-	complex<double> ee=tempvec.adjoint()*this->EigenDense*tempvec;
-	cout<<"energy: "<<real(ee)<<" "<<self_energy()<<" "<<real(ee)/(1.*this->Ne)+self_energy()<<endl;
-	structure_factors(this->eigvecs[0]);
+//	write_vector(energy_sum,"energies");
+//	cout<<"energy: "<<this->eigvals[0]<<" "<<self_energy()<<" "<<this->eigvals[0]/(1.*this->Ne)+self_energy()<<endl;
+//	haldane=false;
+//	this->make_Hnn();
+//	Eigen::VectorXcd tempvec=Std_To_Eigen(this->eigvecs[0]);
+//	complex<double> ee=tempvec.adjoint()*this->EigenDense*tempvec;
+//	cout<<"energy: "<<real(ee)<<" "<<self_energy()<<" "<<real(ee)/(1.*this->Ne)+self_energy()<<endl;
+//	structure_factors(this->eigvecs[0]);
 
-	duncan=true;
-	this->make_Hnn();
-	tempvec=Std_To_Eigen(this->eigvecs[0]);
-	ee=tempvec.adjoint()*this->EigenDense*tempvec;
-	cout<<"energy: "<<real(ee)<<" "<<self_energy()<<" "<<real(ee)/(1.*this->Ne)+self_energy()<<endl;
-	structure_factors(this->eigvecs[0]);
+//	duncan=true;
+//	this->make_Hnn();
+//	tempvec=Std_To_Eigen(this->eigvecs[0]);
+//	ee=tempvec.adjoint()*this->EigenDense*tempvec;
+//	cout<<"energy: "<<real(ee)<<" "<<self_energy()<<" "<<real(ee)/(1.*this->Ne)+self_energy()<<endl;
+//	structure_factors(this->eigvecs[0]);
 
+	stringstream filename;
+	filename<<"eigenvectors"<<this->Ne;
+	ofstream eigout(filename.str().c_str());
+	for(unsigned int j=0;j<this->eigvecs[0].size();j++)
+		eigout<<real(this->eigvecs[0][j])<<" "<<imag(this->eigvecs[0][j])<<endl;
 }
 
 template<class ART>
@@ -262,32 +266,33 @@ void TorusSolver<ART>::berry_phase(){
 	//set up locations of the holes
 	ofstream sumout("err_v_step",ios::app);
 //	int steps=2;
-	int step_array[]={15,20,30,45,70,105};
+	int step_array[]={2,5,10,20,30,45};
+	vector<Eigen::MatrixXcd> overlaps(nds,Eigen::MatrixXcd(3,3));
+	vector<Eigen::VectorXcd> psi0(3),psi1(3),psi2(3);
+	Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es;
+	Eigen::MatrixXcd total;
 	for(int steps_c=0;steps_c<6;steps_c++){
 		int steps=step_array[steps_c];
-		double step=side/(1.*steps);
+		double step=1./(1.*steps);
 		vector<double> holes_x,holes_y;
 		for(int x=0;x<steps;x++){
 			holes_x.push_back(x*step);
 			holes_y.push_back(0);
 		}
-		for(int y=0;y<this->NROD*steps;y++){
-			holes_x.push_back(side);
-			holes_y.push_back(y*step);
-		}
-		for(int x=steps;x>0;x--){
-			holes_x.push_back(x*step);
-			holes_y.push_back(this->NROD*side);
-		}
-		for(double y=this->NROD*steps;y>0;y--){
-			holes_x.push_back(0);
-			holes_y.push_back(y*step);
-		}
+//		for(int y=0;y<this->NROD*steps;y++){
+//			holes_x.push_back(side);
+//			holes_y.push_back(y*step);
+//		}
+//		for(int x=steps;x>0;x--){
+//			holes_x.push_back(x*step);
+//			holes_y.push_back(this->NROD*side);
+//		}
+//		for(double y=this->NROD*steps;y>0;y--){
+//			holes_x.push_back(0);
+//			holes_y.push_back(y*step);
+//		}
 		int nds=holes_x.size();
 	
-		vector<Eigen::MatrixXcd> overlaps(nds,Eigen::MatrixXcd(3,3));
-		vector<Eigen::VectorXcd> psi0(3),psi1(3),psi2(3);
-		Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es;
 	
 		stringstream filename;
 		cout<<this->nStates<<endl;	
@@ -318,7 +323,7 @@ void TorusSolver<ART>::berry_phase(){
 	//		cout<<endl<<endl;
 
 		}
-		Eigen::MatrixXcd total=Eigen::MatrixXcd::Identity(3,3);
+		total=Eigen::MatrixXcd::Identity(3,3);
 		double sum;
 		vector<double> running_phase(3,0);
 		for(int b=0;b<nds;b++){
