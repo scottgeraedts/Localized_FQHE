@@ -260,32 +260,32 @@ void TorusSolver<ART>::berry_phase(){
 	ofstream sumout("err_v_step",ios::app);
 //	int steps=2;
 	int step_array[]={2,5,10,15,20,30,45,70,105};
-	vector<Eigen::MatrixXcd> overlaps(nds,Eigen::MatrixXcd(3,3));
+	vector<Eigen::MatrixXcd> overlaps;
 	vector<Eigen::VectorXcd> psi0(3),psi1(3),psi2(3);
 	Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es;
 	Eigen::MatrixXcd total;
 	for(int steps_c=0;steps_c<9;steps_c++){
 		int steps=step_array[steps_c];
-		double step=1./(1.*steps);
+		double step=side/(1.*steps);
 		vector<double> holes_x,holes_y;
 		for(int x=0;x<steps;x++){
 			holes_x.push_back(x*step);
 			holes_y.push_back(0);
 		}
-//		for(int y=0;y<this->NROD*steps;y++){
-//			holes_x.push_back(side);
-//			holes_y.push_back(y*step);
-//		}
-//		for(int x=steps;x>0;x--){
-//			holes_x.push_back(x*step);
-//			holes_y.push_back(this->NROD*side);
-//		}
-//		for(double y=this->NROD*steps;y>0;y--){
-//			holes_x.push_back(0);
-//			holes_y.push_back(y*step);
-//		}
+		for(int y=0;y<this->NROD*steps;y++){
+			holes_x.push_back(side);
+			holes_y.push_back(y*step);
+		}
+		for(int x=steps;x>0;x--){
+			holes_x.push_back(x*step);
+			holes_y.push_back(this->NROD*side);
+		}
+		for(double y=this->NROD*steps;y>0;y--){
+			holes_x.push_back(0);
+			holes_y.push_back(y*step);
+		}
 		int nds=holes_x.size();
-	
+		overlaps=vector<Eigen::MatrixXcd>(nds,Eigen::MatrixXcd::Zero(3,3));	
 	
 		stringstream filename;
 		cout<<this->nStates<<endl;	
