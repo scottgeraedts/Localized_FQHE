@@ -20,8 +20,8 @@ all: $(SOURCES) $(EXECUTABLE)
 singletest.out: singletest.o SingleSolver.o Potential.o
 	$(CC) -I$(MYDIR) singletest.o SingleSolver.o Potential.o $(LIBS) -o singletest.out
 
-torus.out: main.o SingleSolver.o Potential.o
-	$(CC) -I$(MYDIR) main.o SingleSolver.o Potential.o $(LIBS) -o torus.out
+torus.out: main.o SingleSolver.o Potential.o 
+	$(CC) -I$(MYDIR) main.o SingleSolver.o Potential.o  $(LIBS) -o torus.out
 
 sphere.out: SphereSolver.o SingleSolver.o Potential.o
 	$(CC) -I$(MYDIR) SphereSolver.o SingleSolver.o Potential.o $(LIBS) -o sphere.out
@@ -29,5 +29,7 @@ sphere.out: SphereSolver.o SingleSolver.o Potential.o
 .cpp.o:
 	$(CC) $(CFLAGS) $< -o $@
 	
+%.o: %.f90
+	gfortran $(CFLAGS) $< -o $@
 clean:
 	rm *.o

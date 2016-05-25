@@ -3,6 +3,14 @@
 #include "ManySolver.h"
 //#include "arscomp.h"
 
+extern"C"{
+	complex<double> landau_coulomb_(int *k1, int *k2, int *k3, int *k4);
+	void make_landau_coulomb_();
+	void coulomb_setup_();
+	void set_l_(int *NPhi, complex<double> *l1, complex <double> *l2);
+	void setup_z_function_table_();
+}
+
 template <class ART>
 class TorusSolver:public ManySolver<ART>{
 
@@ -11,6 +19,10 @@ public:
 	TorusSolver(int);
 	double numerical_semidefinite_integral(double dx,double start,double tol,double z);
 	void add_disorder(int seed, double V,int,int);
+	void structure_factors(const vector<ART> &eigvec);
+	void berry_phase();
+	void run_groundstate();
+	void run_finite_energy();
 
 private:
 
@@ -18,14 +30,13 @@ private:
 	int count;
 	double self_energy();
 	double Misra_onehalf(double t,double z);
-	bool arpack;
+	bool arpack,haldane,duncan;
 
-	void run_groundstate();
-	void run_finite_energy();
 	ART two_body(int a,int b);//could make virtual
 	ART four_body(int a,int b,int c,int d);//could make virtual
 	ART four_body_coulomb(int a,int b, int c, int d);
 	ART four_body_haldane(int a,int b, int c, int d);
+	ART four_body_duncan(int a, int b, int c, int d);
 	double Hermite(double x,int n);
 	int get_charge(int state);//could make virtual
 
@@ -46,7 +57,6 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	this->periodic=1;
 	arpack=true;
 
-	run_finite_energy();
 }
 
 template<class ART>
@@ -176,16 +186,33 @@ void TorusSolver<ART>::run_finite_energy(){
 template<class ART>
 void TorusSolver<ART>::run_groundstate(){
 
+	haldane=false;
+	arpack=false;
+	this->disorder=1;
+	this->project=0;
+	this->NROD=1;
 	int stop=25;
 	Eigen::VectorXd energy_sum;
 	if(!arpack) energy_sum=Eigen::VectorXd::Zero(this->nStates);
 	else energy_sum=Eigen::VectorXd::Zero(stop);
-	
+
+//	cout<<"make duncans stuff"<<endl;
+//	complex<double> L1(Lx/sqrt(2),0), L2(0,Ly/sqrt(2));
+//	set_l_(&(this->NPhi), &L1, &L2);
+//	setup_z_function_table_();
+//	coulomb_setup_();
+//	make_landau_coulomb_();
+//	cout<<"duncan's matrix elements"<<endl;
+//	cout<<four_body_duncan(0,3,2,1)<<" "<<four_body_coulomb(0,3,2,1)<<endl;	
+//	cout<<four_body_duncan(1,4,3,2)<<" "<<four_body_coulomb(1,4,3,2)<<endl;	
+//	cout<<four_body_duncan(1,6,5,2)<<" "<<four_body_coulomb(1,6,5,2)<<endl;	
+
 	for(int i=0;i<this->NROD;i++){
 		//construct hamiltonian
 		if(this->project && this->disordered_projection) this->single.init_deltas_random(i+this->random_offset,this->nLow,this->nHigh);
-		if(this->disorder) this->single.init_whitenoise(i+this->random_offset,this->disorder_strength);
+		//if(this->disorder) this->single.init_whitenoise(i+this->random_offset,this->disorder_strength);
 
+		this->single.init_deltas_lattice(1);
 		this->make_Hnn();
 		
 		if(!arpack){
@@ -198,9 +225,129 @@ void TorusSolver<ART>::run_groundstate(){
 		for(int j=0;j<this->eigvals.size();j++) energy_sum(j)+=this->eigvals[j]/(1.*this->NROD);
 			 
 	}//NROD
-	write_vector(energy_sum,"energies");	
+	write_vector(energy_sum,"energies");
+	cout<<"energy: "<<this->eigvals[0]<<" "<<self_energy()<<" "<<this->eigvals[0]/(1.*this->Ne)+self_energy()<<endl;
+	haldane=false;
+	this->make_Hnn();
+	Eigen::VectorXcd tempvec=Std_To_Eigen(this->eigvecs[0]);
+	complex<double> ee=tempvec.adjoint()*this->EigenDense*tempvec;
+	cout<<"energy: "<<real(ee)<<" "<<self_energy()<<" "<<real(ee)/(1.*this->Ne)+self_energy()<<endl;
+	structure_factors(this->eigvecs[0]);
+
+	duncan=true;
+	this->make_Hnn();
+	tempvec=Std_To_Eigen(this->eigvecs[0]);
+	ee=tempvec.adjoint()*this->EigenDense*tempvec;
+	cout<<"energy: "<<real(ee)<<" "<<self_energy()<<" "<<real(ee)/(1.*this->Ne)+self_energy()<<endl;
+	structure_factors(this->eigvecs[0]);
 
 }
+
+template<class ART>
+void TorusSolver<ART>::berry_phase(){
+	haldane=false;
+	arpack=false;
+	this->disorder=1;
+	this->project=0;
+
+	double A=0.4;
+	double side=sqrt(A);
+	//set up locations of the holes
+	ofstream sumout("err_v_step",ios::app);
+//	int steps=2;
+	int step_array[]={2,5,10,15,20,30,45,70,105};
+	for(int steps_c=0;steps_c<9;steps_c++){
+		int steps=step_array[steps_c];
+		double step=side/(1.*steps);
+		vector<double> holes_x,holes_y;
+		for(int x=0;x<steps;x++){
+			holes_x.push_back(x*step);
+			holes_y.push_back(0);
+		}
+		for(int y=0;y<this->NROD*steps;y++){
+			holes_x.push_back(side);
+			holes_y.push_back(y*step);
+		}
+		for(int x=steps;x>0;x--){
+			holes_x.push_back(x*step);
+			holes_y.push_back(this->NROD*side);
+		}
+		for(double y=this->NROD*steps;y>0;y--){
+			holes_x.push_back(0);
+			holes_y.push_back(y*step);
+		}
+		int nds=holes_x.size();
+	
+		vector<Eigen::MatrixXcd> overlaps(nds,Eigen::MatrixXcd(3,3));
+		vector<Eigen::VectorXcd> psi0(3),psi1(3),psi2(3);
+		Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es;
+	
+		stringstream filename;
+		cout<<this->nStates<<endl;	
+		for(int b=0;b<nds;b++){
+			this->single.init_hole(holes_x[b],holes_y[b]);
+			this->make_Hnn();
+			this->EigenDenseEigs();
+			for(int i=0;i<3;i++) psi1[i]=Std_To_Eigen(this->eigvecs[i]);
+
+			if(b>0){
+				for(int gs1=0;gs1<3;gs1++){
+					for(int gs2=0;gs2<3;gs2++){
+						overlaps[b](gs1,gs2)=psi1[gs1].dot(psi2[gs2]);
+					}
+				}
+			}
+			if(b==nds-1){
+				for(int gs1=0;gs1<3;gs1++){
+					for(int gs2=0;gs2<3;gs2++){
+						overlaps[0](gs1,gs2)=psi0[gs1].dot(psi1[gs2]);
+					}
+				}
+			}			
+			psi2=psi1;
+			if(b==0) psi0=psi1;
+			//print the energies to make sure that they make sense
+	//		for(int i=0;i<5;i++) cout<<this->eigvals[i]<<" ";
+	//		cout<<endl<<endl;
+
+		}
+		Eigen::MatrixXcd total=Eigen::MatrixXcd::Identity(3,3);
+		double sum;
+		vector<double> running_phase(3,0);
+		for(int b=0;b<nds;b++){
+			total=overlaps[b]*total;
+	//		cout<<overlaps[b]<<endl;
+			cout<<setprecision(15)<<holes_x[b]<<" "<<holes_y[b]<<endl;
+			es.compute(overlaps[b]);
+			sum=0;
+			for(int i=0;i<3;i++){
+				cout<<abs(es.eigenvalues()(i))<<" "<<arg(es.eigenvalues()(i))<<endl;
+				sum+=arg(es.eigenvalues()(i));
+				running_phase[i]+=arg(es.eigenvalues()(i));
+			}
+			cout<<"sum: "<<sum<<endl;
+		}
+		cout<<"total:"<<endl;
+		cout<<total<<endl;
+		es.compute(total);
+		sum=0;
+		double sum2=0;
+		for(int i=0;i<3;i++){
+			cout<<abs(es.eigenvalues()(i))<<" "<<arg(es.eigenvalues()(i))<<" "<<running_phase[i]<<endl;
+			sum+=arg(es.eigenvalues()(i));
+			sum2+=running_phase[i];
+		}		
+		cout<<"sum: "<<sum<<" "<<sum2<<endl;
+		while(sum>M_PI) sum-=2*M_PI;
+		while(sum<-M_PI) sum+=2*M_PI;
+		sumout<<steps<<" "<<step<<" ";
+		for(int i=0;i<3;i++) sumout<<abs(es.eigenvalues()(i))<<" "<<arg(es.eigenvalues()(i))<<" ";
+		sumout<<total.norm();
+		sumout<<endl;
+	}
+	sumout.close();
+}
+
 ///functions which are definitely unique to the torus
 template <class ART>
 int TorusSolver<ART>::get_charge(int s){
@@ -394,8 +541,37 @@ ART TorusSolver<ART>::four_body_haldane(int a, int b, int c, int d){
 	}		
 	return 2*bigout;//here swapping c&d gives the same thing up to a - sign that accounts for fermion parity, so just 
 }
+//uses duncan's library to generate coulomb matrix elements
+//template<class ART>
+//ART TorusSolver<ART>::four_body_duncan(int a, int b, int c, int d){
+//	return landau_coulomb_(&a,&b,&c,&d);
+//}
+
 template<class ART>
-ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ return four_body_haldane(a,b,c,d);}
+ART TorusSolver<ART>::four_body(int a, int b, int c, int d){ 
+	if(haldane==true) return four_body_haldane(a,b,c,d);
+	//else if(duncan==true) return four_body_duncan(a,b,c,d);
+	else return four_body_coulomb(a,b,c,d);	
+}
+
+//calculates structure factors
+//right now only does qx=0 case since that is easiest
+template<class ART>
+void TorusSolver<ART>::structure_factors(const vector<ART> &eigvec){
+	ofstream sqout("sq");
+	vector<double> sk(this->NPhi), sk2(this->NPhi); 
+	for(int i=0;i<this->nStates;i++){
+		for(int k=0;k<this->NPhi;k++){
+			if(bittest(this->states[i],k)) sk[k]+=norm(eigvec[i]);
+			for(int n=0;n<this->NPhi;n++){
+				if( bittest(this->states[i],n) && bittest(this->states[i],(n+k)%this->NPhi)) sk2[k]+=norm(eigvec[i]);
+			}
+		}
+	}
+	for(int i=0;i<this->NPhi;i++) sqout<<i<<" "<<sk[i]<<" "<<sk2[i]/(1.*this->NPhi)<<endl;
+	sqout.close();		
+}
+
 //Hermite polynomials (using the 'probabalist' definition, see the wikipedia entry)
 template<class ART>
 double TorusSolver<ART>::Hermite(double x, int n){

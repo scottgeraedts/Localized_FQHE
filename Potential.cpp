@@ -15,9 +15,9 @@ void Potential::make_potential_gaussian(map <string, double> &params){
 	temp_Vq.resize(2*qbounds+1,qbounds+1);
 	for(int i=0;i<2*qbounds+1;i++){
 		for(int j=0;j<=qbounds;j++){
-			if (i==qbounds && j==0) V(i,j)=complex<double>(ran.randNorm(0,Vstrength),0);
-			else if(j==0 && i>qbounds) V(i,j)=conj(V(2*qbounds-i,j));
-			else V(i,j)=complex<float>(ran.randNorm(0,Vstrength),ran.randNorm(0,Vstrength));
+			if (i==qbounds && j==0) V(i,j)=1.;//complex<double>(ran.randNorm(0,Vstrength),0);
+			else if(j==0 && i>qbounds) V(i,j)=1.;//conj(V(2*qbounds-i,j));
+			else V(i,j)=1.;//complex<float>(ran.randNorm(0,Vstrength),ran.randNorm(0,Vstrength));
 		}
 	}
 }
@@ -49,12 +49,17 @@ void Potential::make_potential_lattice(map <string, double> &params){
 	complex<double> temp(0,0);
 	int nHigh=floor(params["nHigh"]+0.1);
 	int squareroot=sqrt(nHigh);
-	cout<<squareroot<<endl;
 	double Vstrength=params["Vstrength"];
+	double xoffset=0,yoffset=0;
+	map<string,double>::iterator it=params.find("xoffset");
+	if(it != params.end()) xoffset=params["xoffset"];
+	it=params.find("yoffset");
+	if(it != params.end()) yoffset=params["yoffset"];
+	
 //	cout<<"ns: "<<nLow<<" "<<nHigh<<endl;
 	for(int x=0;x<nHigh;x++){
-			xloc.push_back( (Lx* (x%squareroot) )/(1.*nHigh) ); 
-			yloc.push_back( (Ly* (x/squareroot) )/(1.*nHigh) );
+			xloc.push_back( (Lx* ((x%squareroot)+xoffset) )/(1.*nHigh) ); 
+			yloc.push_back( (Ly* ((x/squareroot)+yoffset) )/(1.*nHigh) );
 			sign.push_back(1);//list of locations and signs of delta functions
 	}
 	for(int i=0;i<2*qbounds+1;i++){
