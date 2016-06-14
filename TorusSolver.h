@@ -254,17 +254,17 @@ void TorusSolver<ART>::berry_phase(){
 	this->disorder=1;
 	this->project=0;
 
-	double A=0.4;
+	double A=0.01;
 	double side=sqrt(A);
 	//set up locations of the holes
 	ofstream sumout("err_v_step",ios::app);
 //	int steps=2;
-	int step_array[]={2,5,10,15,20,30,45,70,105};
+	int step_array[]={5,10,15,20};
 	vector<Eigen::MatrixXcd> overlaps;
 	vector<Eigen::VectorXcd> psi0(3),psi1(3),psi2(3);
 	Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es;
 	Eigen::MatrixXcd total;
-	for(int steps_c=0;steps_c<9;steps_c++){
+	for(int steps_c=0;steps_c<4;steps_c++){
 		int steps=step_array[steps_c];
 		double step=side/(1.*steps);
 		vector<double> holes_x,holes_y;
