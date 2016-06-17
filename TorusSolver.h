@@ -55,7 +55,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	
 	this->init();
 	this->periodic=1;
-	arpack=true;
+	arpack=false;
 
 }
 
@@ -100,10 +100,11 @@ void TorusSolver<ART>::run_finite_energy(){
 	vector< vector<double> > energies(this->NROD,tempvec);
 	double temp,temp_oldr, temp_kl;
 	vector<double>::iterator low;
-			
+cout<<this->disorder<<endl;			
 	ofstream energyout;
 	energyout.open("energies");
 
+	ofstream matrixout("Hnm"), imagmatrixout("Hnm_imag");
 	for(int i=0;i<this->NROD;i++){
 		//construct hamiltonian
 		if(this->project && this->disordered_projection) this->single.init_deltas_random(i+this->random_offset,this->nLow,this->nHigh);
@@ -111,11 +112,22 @@ void TorusSolver<ART>::run_finite_energy(){
 
 		this->make_Hnn();
 		
+//		for(int m=0;m<this->nStates;m++){
+//			for(int n=0;n<this->nStates; n++){
+//				matrixout<<real(this->EigenDense(n,m))<<" ";
+//				imagmatrixout<<imag(this->EigenDense(n,m))<<" ";
+//			}
+//			matrixout<<endl;
+//			imagmatrixout<<endl;
+//		}
+//		break;
 		if(!arpack){
 			this->EigenDenseEigs();	
 			//compute windows, and get js from windows
 			minE=this->eigvals[0];
 			maxE=this->eigvals[this->nStates-1];
+			cout<<maxE<<" "<<minE<<endl;
+			//for(int w=0;w<this->nStates;w++) cout<<this->eigvals[w]<<endl;
 			for(int w=0;w<windows.size();w++){
 				low=lower_bound(this->eigvals.begin(),this->eigvals.end(),minE+windows[w]*(maxE-minE));
 				jindex=low-this->eigvals.begin();
@@ -137,6 +149,7 @@ void TorusSolver<ART>::run_finite_energy(){
 
 			maxE=this->single_energy("LR");
 			minE=this->single_energy("SR");
+			cout<<maxE<<" "<<minE<<endl;
 			double eps;
 			for(int w=0;w<windows.size();w++){
 				eps=windows[w]*(maxE-minE)+minE;
@@ -158,6 +171,8 @@ void TorusSolver<ART>::run_finite_energy(){
 			
 		}//if arpack
 	}//NROD
+	matrixout.close();
+	return;
 	energyout.close();
 
 //calculated unfolded level spacing ratios, not worrying about this for now
