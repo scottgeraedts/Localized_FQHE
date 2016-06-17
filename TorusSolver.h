@@ -2,7 +2,7 @@
 #define TORUS_SOLVER_H
 #include "version.h"
 #include "ManySolver.h"
-//#include "arscomp.h"
+#include "matprod2.h"
 
 extern"C"{
 	complex<double> landau_coulomb_(int *k1, int *k2, int *k3, int *k4);
@@ -135,14 +135,19 @@ void TorusSolver<ART>::run_finite_energy(){
 			
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
+			MatrixWithProduct2 mat2(this->nStates);
+		
+			mat2.CSR_from_Dense(this->EigenDense);
+
 			clock_t t=clock();
 			time_t timer1,timer2;
 			time(&timer1);
-			maxE=this->single_energy("LA");
-			minE=this->single_energy("SA");
+			maxE=mat2.single_energy("LA");
+			minE=mat2.single_energy("SA");
 			time(&timer2);
 	                cout<<"time to get upper and lower"<<((float)(clock()-t))/(1.*CLOCKS_PER_SEC)<<" "<<difftime(timer2,timer1)<<endl;
-
+			cout<<maxE<<" "<<minE<<endl;
+			break;
 			double eps;
 			for(int w=0;w<windows.size();w++){
 				eps=windows[w]*(maxE-minE)+minE;

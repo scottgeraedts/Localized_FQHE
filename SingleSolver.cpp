@@ -231,7 +231,7 @@ void SingleSolver::make_Hamiltonian(Potential &pot,double theta_x,double theta_y
 //	Eigen::MatrixXcd Hnn;
 	Hnn.resize(NPhi,NPhi); dVdX.resize(NPhi,NPhi); dVdY.resize(NPhi,NPhi);
 	double qx,qy,arg, p_arg, exp_qx,exp_qy;
-	complex<double> tempH,tempX,tempY,temp;
+	complex<double> tempH(0),tempX,tempY,temp;
 	double tol=1e-16;
 	int mx;
 	for(int n1=0;n1<NPhi;n1++){
