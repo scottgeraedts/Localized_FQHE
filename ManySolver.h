@@ -127,7 +127,7 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<double>(),Wavefunction<double>()
 	else disorder=0;
 	if(nHigh>0 || nLow>0) project=1;
 	else project=0;
-	if(disorder || project) cache=1;
+	if(disorder || project) cache=0;
 	else cache=0;
 	lookups=0;
 	if (charge==-1) has_charge=0;
@@ -232,7 +232,7 @@ void ManySolver<ART>::make_Hnn(){
 					temp=get_interaction(a,b,c,d);
 					if(!project) //if we are not projecting into a different subspace, then this term conserves momentum and we can skip some elements in the sum
 						if( (periodic && (a+b)%NPhi != (c+d)%NPhi) || (!periodic && a+b!=c+d) ) continue;
-	//				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
+				//	cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
 					for(int i=0;i<nStates;i++){
 						if( (states[i] & 1<<a) && (states[i] & 1<<b) &&
 						 ( (!(states[i] & 1<<c) && c<NPhi-nHigh && c>=nLow) || c==a || c==b) && 

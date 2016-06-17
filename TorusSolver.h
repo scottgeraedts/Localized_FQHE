@@ -63,7 +63,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 template<class ART>
 void TorusSolver<ART>::run_finite_energy(){
 	double se=self_energy();
-
+	haldane=true;
 	//which states to look at
 	double minE,maxE;
 	vector<double> windows;//which energies to look at
@@ -101,22 +101,33 @@ void TorusSolver<ART>::run_finite_energy(){
 	vector< vector<double> > energies(this->NROD,tempvec);
 	double temp,temp_oldr, temp_kl;
 	vector<double>::iterator low;
-			
+cout<<this->disorder<<endl;			
 	ofstream energyout;
 	energyout.open("energies");
 
+	ofstream matrixout("Hnm"), imagmatrixout("Hnm_imag");
 	for(int i=0;i<this->NROD;i++){
 		//construct hamiltonian
 		if(this->project && this->disordered_projection) this->single.init_deltas_random(i+this->random_offset,this->nLow,this->nHigh);
 		if(this->disorder) this->single.init_whitenoise(i+this->random_offset,this->disorder_strength);
 
 		this->make_Hnn();
-		
+//		for(int m=0;m<this->nStates;m++){
+//			for(int n=0;n<this->nStates; n++){
+//				matrixout<<real(this->EigenDense(n,m))<<" ";
+//				imagmatrixout<<imag(this->EigenDense(n,m))<<" ";
+//			}
+//			matrixout<<endl;
+//			imagmatrixout<<endl;
+//		}
+//		break;
 		if(!arpack){
 			this->EigenDenseEigs();	
 			//compute windows, and get js from windows
 			minE=this->eigvals[0];
 			maxE=this->eigvals[this->nStates-1];
+			cout<<maxE<<" "<<minE<<endl;
+			//for(int w=0;w<this->nStates;w++) cout<<this->eigvals[w]<<endl;
 			for(int w=0;w<windows.size();w++){
 				low=lower_bound(this->eigvals.begin(),this->eigvals.end(),minE+windows[w]*(maxE-minE));
 				jindex=low-this->eigvals.begin();
@@ -143,6 +154,7 @@ void TorusSolver<ART>::run_finite_energy(){
 			time(&timer2);
 	                cout<<"time to get upper and lower"<<((float)(clock()-t))/(1.*CLOCKS_PER_SEC)<<" "<<difftime(timer2,timer1)<<endl;
 
+			cout<<maxE<<" "<<minE<<endl;
 			double eps;
 			for(int w=0;w<windows.size();w++){
 				eps=windows[w]*(maxE-minE)+minE;
@@ -164,6 +176,8 @@ void TorusSolver<ART>::run_finite_energy(){
 			
 		}//if arpack
 	}//NROD
+	matrixout.close();
+	return;
 	energyout.close();
 
 //calculated unfolded level spacing ratios, not worrying about this for now
@@ -260,17 +274,17 @@ void TorusSolver<ART>::berry_phase(){
 	this->disorder=1;
 	this->project=0;
 
-	double A=0.4;
+	double A=0.01;
 	double side=sqrt(A);
 	//set up locations of the holes
 	ofstream sumout("err_v_step",ios::app);
 //	int steps=2;
-	int step_array[]={2,5,10,15,20,30,45,70,105};
+	int step_array[]={5,10,15,20};
 	vector<Eigen::MatrixXcd> overlaps;
 	vector<Eigen::VectorXcd> psi0(3),psi1(3),psi2(3);
 	Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es;
 	Eigen::MatrixXcd total;
-	for(int steps_c=0;steps_c<9;steps_c++){
+	for(int steps_c=0;steps_c<4;steps_c++){
 		int steps=step_array[steps_c];
 		double step=side/(1.*steps);
 		vector<double> holes_x,holes_y;
