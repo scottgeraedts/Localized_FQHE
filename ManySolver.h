@@ -16,9 +16,9 @@
 #include "utils.h"
 #include <string>
 #include "matprod.h"
-extern "C"{
-#include "cblas.h"
-}
+//extern "C"{
+//#include "cblas.h"
+//}
 //#include "arscomp.h"
 
 //will use std::bitset library to store bits, which needs to know the number of bits at compile time
@@ -26,7 +26,7 @@ extern "C"{
 using namespace std;
 
 template <class ART>
-class ManySolver:public MatrixWithProduct<ART>, public Wavefunction<ART>{
+class ManySolver:public MatrixWithProduct<double>, public Wavefunction<double>{
 public:
 	ManySolver();
 	void print_H();
@@ -98,7 +98,7 @@ protected:
 ///**************DEFINITIONS HERE************///
 
 template<class ART>
-ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
+ManySolver<ART>::ManySolver():MatrixWithProduct<double>(),Wavefunction<double>(){
 	//read stuff for this run from the parameters file
 	ifstream infile;
 	infile.open("params");
@@ -206,7 +206,7 @@ void ManySolver<ART>::make_states(){
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
 	if(cache && disorder) disorder_cache();
-	this->EigenDense=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
+	this->EigenDense=Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 	int j;
 	ART temp;
 	for(signed int a=0;a<NPhi;a++){
@@ -219,7 +219,7 @@ void ManySolver<ART>::make_Hnn(){
 				for(int i=0;i<(signed)nStates;i++){
 					if ((states[i] & 1<<a) && (b==a || (!( states[i] & 1<<b) && a>=nLow && a<NPhi-nHigh && b>=nLow && b<NPhi-nHigh) ) ){
 						j=lookup_flipped(i,states,2,a,b);
-						this->EigenDense(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
+						this->EigenDense(i,j)+=(double)adjust_sign(a,b,states[i]) * real(temp);
 					}
 				}
 			}
@@ -240,7 +240,7 @@ void ManySolver<ART>::make_Hnn(){
 						 ( (a>=nLow && a<NPhi-nHigh) || a==c ||a==d) &&
 						 ( (b<NPhi-nHigh && b>=nLow) || b==c ||b==d)  )  {
 							j=lookup_flipped(i,states,4,a,b,c,d);
-							this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
+							this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * real(temp);
 						}
 					}
 				}//d	

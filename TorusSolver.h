@@ -1,5 +1,6 @@
 #ifndef TORUS_SOLVER_H
 #define TORUS_SOLVER_H
+#include "version.h"
 #include "ManySolver.h"
 //#include "arscomp.h"
 
@@ -134,19 +135,24 @@ void TorusSolver<ART>::run_finite_energy(){
 			
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
+			clock_t t=clock();
+			time_t timer1,timer2;
+			time(&timer1);
+			maxE=this->single_energy("LA");
+			minE=this->single_energy("SA");
+			time(&timer2);
+	                cout<<"time to get upper and lower"<<((float)(clock()-t))/(1.*CLOCKS_PER_SEC)<<" "<<difftime(timer2,timer1)<<endl;
 
-			maxE=this->single_energy("LR");
-			minE=this->single_energy("SR");
 			double eps;
 			for(int w=0;w<windows.size();w++){
 				eps=windows[w]*(maxE-minE)+minE;
 				this->eigenvalues(stop,eps);
 //				for(int k=0;k<stop;k++) cout<<this->eigvals[k]<<endl;
-				temp=this->entanglement_entropy(this->eigvecs,this->states,0);
-				ee(w)+=temp;
-				ee2(w)+=temp*temp;
-				temp_kl=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2]);
-				kltot(w)+=temp_kl;
+				//temp=this->entanglement_entropy(this->eigvecs,this->states,0);
+			//	ee(w)+=temp;
+			//	ee2(w)+=temp*temp;
+			//	temp_kl=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2]);
+			//	kltot(w)+=temp_kl;
 				temp_oldr=stupid_spacings(this->eigvals,w);
 				oldrtot(w)+=temp_oldr;
 				cout<<w<<" "<<temp<<" "<<temp_oldr<<" "<<temp_kl<<endl; //print, just in case this run dies
@@ -172,15 +178,15 @@ void TorusSolver<ART>::run_finite_energy(){
 //		}
 //	}
 
-	write_vector(rtot,"r",this->NROD);
+//	write_vector(rtot,"r",this->NROD);
 	write_vector(oldrtot,"oldr",this->NROD);
-	ee/=(1.*this->NROD);
-	ee2/=(1.*this->NROD);
-	write_vector(ee,"entropy");
-	Eigen::VectorXd vare(windows.size());
-	for(int i=0;i<windows.size();i++) vare[i]=ee2[i]-ee[i]*ee[i];
-	write_vector(vare,"varE");
-	write_vector(kltot,"kullbackleibler",this->NROD);	
+//	ee/=(1.*this->NROD);
+//	ee2/=(1.*this->NROD);
+//	write_vector(ee,"entropy");
+//	Eigen::VectorXd vare(windows.size());
+//	for(int i=0;i<windows.size();i++) vare[i]=ee2[i]-ee[i]*ee[i];
+//	write_vector(vare,"varE");
+//	write_vector(kltot,"kullbackleibler",this->NROD);	
 }
 
 template<class ART>
