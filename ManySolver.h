@@ -26,7 +26,7 @@
 using namespace std;
 
 template <class ART>
-class ManySolver:public MatrixWithProduct<double>, public Wavefunction<double>{
+class ManySolver:public MatrixWithProduct<ART>, public Wavefunction<ART>{
 public:
 	ManySolver();
 	void print_H();
@@ -98,7 +98,7 @@ protected:
 ///**************DEFINITIONS HERE************///
 
 template<class ART>
-ManySolver<ART>::ManySolver():MatrixWithProduct<double>(),Wavefunction<double>(){
+ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
 	//read stuff for this run from the parameters file
 	ifstream infile;
 	infile.open("params");
@@ -127,7 +127,7 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<double>(),Wavefunction<double>()
 	else disorder=0;
 	if(nHigh>0 || nLow>0) project=1;
 	else project=0;
-	if(disorder || project) cache=1;
+	if(disorder || project) cache=0;
 	else cache=0;
 	lookups=0;
 	if (charge==-1) has_charge=0;
@@ -206,7 +206,7 @@ void ManySolver<ART>::make_states(){
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
 	if(cache && disorder) disorder_cache();
-	this->EigenDense=Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
+	this->EigenDense=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 	int j;
 	ART temp;
 	for(signed int a=0;a<NPhi;a++){
@@ -219,7 +219,7 @@ void ManySolver<ART>::make_Hnn(){
 				for(int i=0;i<(signed)nStates;i++){
 					if ((states[i] & 1<<a) && (b==a || (!( states[i] & 1<<b) && a>=nLow && a<NPhi-nHigh && b>=nLow && b<NPhi-nHigh) ) ){
 						j=lookup_flipped(i,states,2,a,b);
-						this->EigenDense(i,j)+=(double)adjust_sign(a,b,states[i]) * real(temp);
+						this->EigenDense(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
 					}
 				}
 			}
@@ -229,10 +229,10 @@ void ManySolver<ART>::make_Hnn(){
 						
 			for(int c=0;c<NPhi;c++){
 				for(int d=0;d<c;d++){
-					temp=get_interaction(a,b,c,d);
 					if(!project) //if we are not projecting into a different subspace, then this term conserves momentum and we can skip some elements in the sum
 						if( (periodic && (a+b)%NPhi != (c+d)%NPhi) || (!periodic && a+b!=c+d) ) continue;
-	//				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
+					temp=get_interaction(a,b,c,d);
+				//	cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
 					for(int i=0;i<nStates;i++){
 						if( (states[i] & 1<<a) && (states[i] & 1<<b) &&
 						 ( (!(states[i] & 1<<c) && c<NPhi-nHigh && c>=nLow) || c==a || c==b) && 
@@ -240,7 +240,7 @@ void ManySolver<ART>::make_Hnn(){
 						 ( (a>=nLow && a<NPhi-nHigh) || a==c ||a==d) &&
 						 ( (b<NPhi-nHigh && b>=nLow) || b==c ||b==d)  )  {
 							j=lookup_flipped(i,states,4,a,b,c,d);
-							this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * real(temp);
+							this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}
 					}
 				}//d	
@@ -295,7 +295,7 @@ template<class ART>
 void ManySolver<ART>::ph_symmetrize(){
 	if(Ne!=NPhi/2)
 		cout<<"warning: trying to symmetrize on a strange number of fluxes"<<endl;
-	Eigen::MatrixXd temp(nStates,nStates);
+	Eigen::Matrix<ART,-1,-1> temp(nStates,nStates);
 	vector<int> conj_dict(nStates,0);
 	int conj;
 	for(int i=0;i<nStates;i++){

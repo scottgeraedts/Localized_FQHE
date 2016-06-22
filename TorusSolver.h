@@ -63,12 +63,13 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 template<class ART>
 void TorusSolver<ART>::run_finite_energy(){
 	double se=self_energy();
-
+	haldane=true;
 	//which states to look at
 	double minE,maxE;
 	vector<double> windows;//which energies to look at
 	for(int i=1;i<4;i++) windows.push_back(i/(1.*4));
 	double jindex;
+	clock_t t;
 
 	//counters
 	Eigen::VectorXd ee=Eigen::VectorXd::Zero(windows.size());
@@ -82,12 +83,10 @@ void TorusSolver<ART>::run_finite_energy(){
 	//stuff for density of states calculation (increase these numbers if disorder strength>30)
 	double startE=-30, endE=30, dE=0.01;
 	int ngrid=floor((endE-startE)/dE);
-	vector<double> energy_grid(ngrid,0);
-	for(int i=0;i<ngrid;i++) energy_grid[i]=startE+i*dE;
 	tempvec=vector<double>(ngrid,0);
 	vector< vector<double> >DOS(windows.size(),tempvec);
 
-	int stop=25; //how many eigenstates to look at in each energy window
+	int stop=40; //how many eigenstates to look at in each energy window
 	MTRand ran(stop);
 	int kl1=ran.randInt(stop-1);//the states we will compute kullback-leibler on
 	int kl2=kl1;
@@ -101,22 +100,37 @@ void TorusSolver<ART>::run_finite_energy(){
 	vector< vector<double> > energies(this->NROD,tempvec);
 	double temp,temp_oldr, temp_kl;
 	vector<double>::iterator low;
-			
+cout<<this->disorder<<endl;			
 	ofstream energyout;
 	energyout.open("energies");
 
+	vector < vector<double> > EE_levels_all(windows.size());
+	vector < vector < vector<double> > > EE_levels_storage(windows.size());
+	MatrixWithProduct2 mat2(this->nStates);
 	for(int i=0;i<this->NROD;i++){
 		//construct hamiltonian
 		if(this->project && this->disordered_projection) this->single.init_deltas_random(i+this->random_offset,this->nLow,this->nHigh);
 		if(this->disorder) this->single.init_whitenoise(i+this->random_offset,this->disorder_strength);
 
+		t=clock();	
 		this->make_Hnn();
-		
+		cout<<"time to make Hamiltonian "<<((float)(clock()-t))/(1.*CLOCKS_PER_SEC)<<endl;
+//		for(int m=0;m<this->nStates;m++){
+//			for(int n=0;n<this->nStates; n++){
+//				matrixout<<real(this->EigenDense(n,m))<<" ";
+//				imagmatrixout<<imag(this->EigenDense(n,m))<<" ";
+//			}
+//			matrixout<<endl;
+//			imagmatrixout<<endl;
+//		}
+//		break;
 		if(!arpack){
 			this->EigenDenseEigs();	
 			//compute windows, and get js from windows
 			minE=this->eigvals[0];
 			maxE=this->eigvals[this->nStates-1];
+			cout<<maxE<<" "<<minE<<endl;
+			//for(int w=0;w<this->nStates;w++) cout<<this->eigvals[w]<<endl;
 			for(int w=0;w<windows.size();w++){
 				low=lower_bound(this->eigvals.begin(),this->eigvals.end(),minE+windows[w]*(maxE-minE));
 				jindex=low-this->eigvals.begin();
@@ -127,7 +141,6 @@ void TorusSolver<ART>::run_finite_energy(){
 				ee(w)+=temp;
 				ee2(w)+=temp*temp;
 				kltot(w)+=kullback_leibler(this->eigvecs[jindex+kl1],this->eigvecs[jindex+kl2]);
-//				density_of_states(this->eigvals,DOS[w],energy_grid,jindex,jindex+stop);
 				oldrtot(w)+=stupid_spacings(this->eigvals,jindex,jindex+stop,w);	
 			}
 			//average the density of states
@@ -135,63 +148,60 @@ void TorusSolver<ART>::run_finite_energy(){
 			
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
-			MatrixWithProduct2 mat2(this->nStates);
-		
+			t=clock();	
 			mat2.CSR_from_Dense(this->EigenDense);
-
-			clock_t t=clock();
+			cout<<"time to translate to a sparse matrix"<<((float)(clock()-t))/(CLOCKS_PER_SEC)<<endl;
+			t=clock();
 			time_t timer1,timer2;
 			time(&timer1);
-			maxE=mat2.single_energy("LA");
-			minE=mat2.single_energy("SA");
+			maxE=mat2.single_energy("LR");
+			minE=mat2.single_energy("SR");
 			time(&timer2);
 	                cout<<"time to get upper and lower"<<((float)(clock()-t))/(1.*CLOCKS_PER_SEC)<<" "<<difftime(timer2,timer1)<<endl;
 			cout<<maxE<<" "<<minE<<endl;
-			break;
+
 			double eps;
 			for(int w=0;w<windows.size();w++){
 				eps=windows[w]*(maxE-minE)+minE;
-				this->eigenvalues(stop,eps);
-//				for(int k=0;k<stop;k++) cout<<this->eigvals[k]<<endl;
-				//temp=this->entanglement_entropy(this->eigvecs,this->states,0);
-			//	ee(w)+=temp;
-			//	ee2(w)+=temp*temp;
-			//	temp_kl=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2]);
-			//	kltot(w)+=temp_kl;
-				temp_oldr=stupid_spacings(this->eigvals,w);
-				oldrtot(w)+=temp_oldr;
-				cout<<w<<" "<<temp<<" "<<temp_oldr<<" "<<temp_kl<<endl; //print, just in case this run dies
-//				density_of_states(this->eigvals,DOS[w],energy_grid);
-				for(int k=0;k<stop;k++) energies[i][w*stop+k]=this->eigvals[k];
-				for(int k=0;k<stop;k++) energyout<<this->eigvals[k]<<" ";
-				energyout<<endl;
+				cout<<"eps="<<eps<<endl;
+				mat2.eigenvalues(stop,eps);
+	//			for(int k=0;k<mat2.eigvals.size();k++) cout<<mat2.eigvals[k]<<endl;
+	//			temp_oldr=stupid_spacings(mat2.eigvals,w);
+	//			oldrtot(w)+=temp_oldr;
+	//			EE_levels_all[w].insert(EE_levels_all[w].end(),mat2.eigvals.begin(),mat2.eigvals.end());
+	//			EE_levels_storage[w].push_back(mat2.eigvals);
 			}
 			
 		}//if arpack
 	}//NROD
-	energyout.close();
+/*
+	vector<double> energy_grid,integrated_DOS,s,s_spacings;
+	ofstream rout,Sout;
+	stringstream filename;
+	for(int w=0;w<(signed)windows.size();w++){
+		filename.str("");
+		filename<<"rout"<<w;
+		rout.open(filename.str().c_str());
+		filename.str("");
+		filename<<"sout"<<w;
+		Sout.open(filename.str().c_str());
 
-//calculated unfolded level spacing ratios, not worrying about this for now
-//	for(int w=0;w<windows.size();w++){
-//		transform(DOS[w].begin(), DOS[w].end(), DOS[w].begin(),bind1st(multiplies<double>(),1/(1.*this->NROD) ) );	
-//		for(int r=0;r<this->NROD;r++){
-//			if(!arpack){
-//				low=lower_bound(this->eigvals.begin(),this->eigvals.end(),minE+windows[w]*(maxE-minE));
-//				rtot(w)+=level_spacings(energies[r],DOS[w],energy_grid,low-this->eigvals.begin(),low-this->eigvals.begin()+stop)/(1.*this->NROD);
-//			}else
-//				rtot(w)+=level_spacings(energies[r],DOS[w],energy_grid,stop*w,stop*(w+1))/(1.*this->NROD);
-//		}
-//	}
-
-//	write_vector(rtot,"r",this->NROD);
-	write_vector(oldrtot,"oldr",this->NROD);
-//	ee/=(1.*this->NROD);
-//	ee2/=(1.*this->NROD);
-//	write_vector(ee,"entropy");
-//	Eigen::VectorXd vare(windows.size());
-//	for(int i=0;i<windows.size();i++) vare[i]=ee2[i]-ee[i]*ee[i];
-//	write_vector(vare,"varE");
-//	write_vector(kltot,"kullbackleibler",this->NROD);	
+		sort(EE_levels_all[w].begin(),EE_levels_all[w].end());
+		energy_grid=make_grid(EE_levels_all[w],200);
+		integrated_DOS=make_DOS(EE_levels_all[w],energy_grid);
+		
+		for(int i=0;i<this->NROD;i++){
+			s=make_S(EE_levels_storage[w][i],energy_grid,integrated_DOS);
+			rout<<compute_r(s)<<endl;
+			s_spacings=spacings(s);
+			for(int j=0;j<(signed)s_spacings.size();j++)
+				Sout<<s_spacings[j]<<endl;
+		}
+		Sout.close();
+		rout.close();
+	}
+*/
+//	write_vector(oldrtot,"oldr",this->NROD);
 }
 
 template<class ART>
@@ -265,17 +275,17 @@ void TorusSolver<ART>::berry_phase(){
 	this->disorder=1;
 	this->project=0;
 
-	double A=0.4;
+	double A=0.01;
 	double side=sqrt(A);
 	//set up locations of the holes
 	ofstream sumout("err_v_step",ios::app);
 //	int steps=2;
-	int step_array[]={2,5,10,15,20,30,45,70,105};
+	int step_array[]={5,10,15,20};
 	vector<Eigen::MatrixXcd> overlaps;
 	vector<Eigen::VectorXcd> psi0(3),psi1(3),psi2(3);
 	Eigen::ComplexEigenSolver<Eigen::MatrixXcd> es;
 	Eigen::MatrixXcd total;
-	for(int steps_c=0;steps_c<9;steps_c++){
+	for(int steps_c=0;steps_c<4;steps_c++){
 		int steps=step_array[steps_c];
 		double step=side/(1.*steps);
 		vector<double> holes_x,holes_y;
