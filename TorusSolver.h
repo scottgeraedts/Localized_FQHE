@@ -171,6 +171,7 @@ cout<<this->disorder<<endl;
 	//			EE_levels_all[w].insert(EE_levels_all[w].end(),mat2.eigvals.begin(),mat2.eigvals.end());
 	//			EE_levels_storage[w].push_back(mat2.eigvals);
 			}
+			mat2.release();
 			
 		}//if arpack
 	}//NROD
