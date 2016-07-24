@@ -16,9 +16,9 @@
 #include "utils.h"
 #include <string>
 #include "matprod.h"
-extern "C"{
-#include "cblas.h"
-}
+//extern "C"{
+//#include "cblas.h"
+//}
 //#include "arscomp.h"
 
 //will use std::bitset library to store bits, which needs to know the number of bits at compile time
@@ -127,7 +127,7 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
 	else disorder=0;
 	if(nHigh>0 || nLow>0) project=1;
 	else project=0;
-	if(disorder || project) cache=1;
+	if(disorder || project) cache=0;
 	else cache=0;
 	lookups=0;
 	if (charge==-1) has_charge=0;
@@ -232,7 +232,7 @@ void ManySolver<ART>::make_Hnn(){
 					temp=get_interaction(a,b,c,d);
 					if(!project) //if we are not projecting into a different subspace, then this term conserves momentum and we can skip some elements in the sum
 						if( (periodic && (a+b)%NPhi != (c+d)%NPhi) || (!periodic && a+b!=c+d) ) continue;
-	//				cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
+				//	cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
 					for(int i=0;i<nStates;i++){
 						if( (states[i] & 1<<a) && (states[i] & 1<<b) &&
 						 ( (!(states[i] & 1<<c) && c<NPhi-nHigh && c>=nLow) || c==a || c==b) && 
@@ -295,7 +295,7 @@ template<class ART>
 void ManySolver<ART>::ph_symmetrize(){
 	if(Ne!=NPhi/2)
 		cout<<"warning: trying to symmetrize on a strange number of fluxes"<<endl;
-	Eigen::MatrixXd temp(nStates,nStates);
+	Eigen::Matrix<ART,-1,-1> temp(nStates,nStates);
 	vector<int> conj_dict(nStates,0);
 	int conj;
 	for(int i=0;i<nStates;i++){

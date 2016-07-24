@@ -1,6 +1,7 @@
 #include "SingleSolver.h"
 Potential::Potential(string _type, int _qbounds, int seed, double _Lx, double _Ly, map <string, double> &params):qbounds(_qbounds),type(_type),Lx(_Lx),Ly(_Ly){
 	ran.seed(seed);
+	cout<<"random seed="<<seed<<endl;
 	V.resize(2*qbounds+1,qbounds+1);
 
 	if (type=="gaussian") make_potential_gaussian(params);
@@ -15,9 +16,9 @@ void Potential::make_potential_gaussian(map <string, double> &params){
 	temp_Vq.resize(2*qbounds+1,qbounds+1);
 	for(int i=0;i<2*qbounds+1;i++){
 		for(int j=0;j<=qbounds;j++){
-			if (i==qbounds && j==0) V(i,j)=1.;//complex<double>(ran.randNorm(0,Vstrength),0);
-			else if(j==0 && i>qbounds) V(i,j)=1.;//conj(V(2*qbounds-i,j));
-			else V(i,j)=1.;//complex<float>(ran.randNorm(0,Vstrength),ran.randNorm(0,Vstrength));
+			if (i==qbounds && j==0) V(i,j)=complex<double>(ran.randNorm(0,Vstrength),0);
+			else if(j==0 && i>qbounds) V(i,j)=conj(V(2*qbounds-i,j));
+			else V(i,j)=complex<float>(ran.randNorm(0,Vstrength),ran.randNorm(0,Vstrength));
 		}
 	}
 }

@@ -59,6 +59,7 @@ void SingleSolver::init_whitenoise(int seed,double V){
 	params["Vstrength"]=1.;
 	Potential p_gauss("gaussian",qbounds,seed,Lx,Ly,params);
 	make_Hamiltonian(p_gauss);
+	cout<<Hnn<<endl;
 }
 void SingleSolver::init_deltas_random(int seed,int nLow, int nHigh){
 	map <string, double> params;

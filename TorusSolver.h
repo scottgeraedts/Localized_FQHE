@@ -61,7 +61,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 
 template<class ART>
 void TorusSolver<ART>::run_finite_energy(){
-	double se=self_energy();
+	haldane=true;
 
 	//which states to look at
 	double minE,maxE;
@@ -87,10 +87,6 @@ void TorusSolver<ART>::run_finite_energy(){
 	vector< vector<double> >DOS(windows.size(),tempvec);
 
 	int stop=25; //how many eigenstates to look at in each energy window
-	MTRand ran(stop);
-	int kl1=ran.randInt(stop-1);//the states we will compute kullback-leibler on
-	int kl2=kl1;
-	while(kl2==kl1) kl2=ran.randInt(stop-1);
 	
 	if(!arpack)
 		tempvec=vector<double>(this->nStates,0);	
@@ -111,23 +107,15 @@ cout<<this->disorder<<endl;
 		if(this->disorder) this->single.init_whitenoise(i+this->random_offset,this->disorder_strength);
 
 		this->make_Hnn();
-		
-//		for(int m=0;m<this->nStates;m++){
-//			for(int n=0;n<this->nStates; n++){
-//				matrixout<<real(this->EigenDense(n,m))<<" ";
-//				imagmatrixout<<imag(this->EigenDense(n,m))<<" ";
-//			}
-//			matrixout<<endl;
-//			imagmatrixout<<endl;
-//		}
-//		break;
+		cout<<this->EigenDense<<endl;
+
 		if(!arpack){
 			this->EigenDenseEigs();	
 			//compute windows, and get js from windows
 			minE=this->eigvals[0];
 			maxE=this->eigvals[this->nStates-1];
-			cout<<maxE<<" "<<minE<<endl;
-			//for(int w=0;w<this->nStates;w++) cout<<this->eigvals[w]<<endl;
+			//cout<<maxE<<" "<<minE<<endl;
+			for(int w=0;w<this->nStates;w++) cout<<this->eigvals[w]<<endl;
 			for(int w=0;w<windows.size();w++){
 				low=lower_bound(this->eigvals.begin(),this->eigvals.end(),minE+windows[w]*(maxE-minE));
 				jindex=low-this->eigvals.begin();
@@ -137,7 +125,7 @@ cout<<this->disorder<<endl;
 				temp=this->entanglement_entropy(this->eigvecs,this->states,jindex);
 				ee(w)+=temp;
 				ee2(w)+=temp*temp;
-				kltot(w)+=kullback_leibler(this->eigvecs[jindex+kl1],this->eigvecs[jindex+kl2]);
+//				kltot(w)+=kullback_leibler(this->eigvecs[jindex+kl1],this->eigvecs[jindex+kl2]);
 //				density_of_states(this->eigvals,DOS[w],energy_grid,jindex,jindex+stop);
 				oldrtot(w)+=stupid_spacings(this->eigvals,jindex,jindex+stop,w);	
 			}
@@ -158,11 +146,11 @@ cout<<this->disorder<<endl;
 				temp=this->entanglement_entropy(this->eigvecs,this->states,0);
 				ee(w)+=temp;
 				ee2(w)+=temp*temp;
-				temp_kl=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2]);
-				kltot(w)+=temp_kl;
+				//temp_kl=kullback_leibler(this->eigvecs[kl1],this->eigvecs[kl2]);
+	//			kltot(w)+=temp_kl;
 				temp_oldr=stupid_spacings(this->eigvals,w);
 				oldrtot(w)+=temp_oldr;
-				cout<<w<<" "<<temp<<" "<<temp_oldr<<" "<<temp_kl<<endl; //print, just in case this run dies
+				//cout<<w<<" "<<temp<<" "<<temp_oldr<<" "<<temp_kl<<endl; //print, just in case this run dies
 //				density_of_states(this->eigvals,DOS[w],energy_grid);
 				for(int k=0;k<stop;k++) energies[i][w*stop+k]=this->eigvals[k];
 				for(int k=0;k<stop;k++) energyout<<this->eigvals[k]<<" ";
@@ -195,13 +183,13 @@ cout<<this->disorder<<endl;
 	Eigen::VectorXd vare(windows.size());
 	for(int i=0;i<windows.size();i++) vare[i]=ee2[i]-ee[i]*ee[i];
 	write_vector(vare,"varE");
-	write_vector(kltot,"kullbackleibler",this->NROD);	
+//	write_vector(kltot,"kullbackleibler",this->NROD);	
 }
 
 template<class ART>
 void TorusSolver<ART>::run_groundstate(){
 
-	haldane=false;
+	haldane=true;
 	arpack=false;
 	this->disorder=0;
 	this->project=0;
