@@ -23,15 +23,18 @@ public:
 	void structure_factors(const vector<ART> &eigvec);
 	void berry_phase();
 	void run_groundstate();
-	void run_finite_energy();
+	void run_finite_energy(int offset);
+	double self_energy();
 
+	void makeShrinker(int nx);
+	Eigen::SparseMatrix<ART> density_operator(int mx, int my);
+	bool arpack,haldane,duncan;
+	Eigen::SparseMatrix<ART> shrinkMatrix;
 private:
 
 	double Lx,Ly,V;
 	int count;
-	double self_energy();
 	double Misra_onehalf(double t,double z);
-	bool arpack,haldane,duncan;
 
 	ART two_body(int a,int b);//could make virtual
 	ART four_body(int a,int b,int c,int d);//could make virtual
@@ -54,16 +57,18 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 		if(this->project && !this->disordered_projection) this->single.init_deltas_lattice(this->nHigh);
 	}
 	
-	this->init();
+	this->init(x);
 	this->periodic=1;
 	arpack=true;
 
 }
 
 template<class ART>
-void TorusSolver<ART>::run_finite_energy(){
-	double se=self_energy();
+void TorusSolver<ART>::run_finite_energy(int offset){
+	cout<<offset<<endl;
 	haldane=true;
+	this->store_sparse=true;
+
 	//which states to look at
 	double minE,maxE;
 	vector<double> windows;//which energies to look at
@@ -86,11 +91,7 @@ void TorusSolver<ART>::run_finite_energy(){
 	tempvec=vector<double>(ngrid,0);
 	vector< vector<double> >DOS(windows.size(),tempvec);
 
-	int stop=40; //how many eigenstates to look at in each energy window
-	MTRand ran(stop);
-	int kl1=ran.randInt(stop-1);//the states we will compute kullback-leibler on
-	int kl2=kl1;
-	while(kl2==kl1) kl2=ran.randInt(stop-1);
+	int stop=100; //how many eigenstates to look at in each energy window
 	
 	if(!arpack)
 		tempvec=vector<double>(this->nStates,0);	
@@ -100,17 +101,18 @@ void TorusSolver<ART>::run_finite_energy(){
 	vector< vector<double> > energies(this->NROD,tempvec);
 	double temp,temp_oldr, temp_kl;
 	vector<double>::iterator low;
-cout<<this->disorder<<endl;			
-	ofstream energyout;
-	energyout.open("energies");
+cout<<this->disorder<<endl;
+	stringstream filename;
+	ofstream energyout,eigvecout;
 
 	vector < vector<double> > EE_levels_all(windows.size());
 	vector < vector < vector<double> > > EE_levels_storage(windows.size());
 	MatrixWithProduct2 mat2(this->nStates);
+	mat2.set_mode("superLU");
 	for(int i=0;i<this->NROD;i++){
 		//construct hamiltonian
 		if(this->project && this->disordered_projection) this->single.init_deltas_random(i+this->random_offset,this->nLow,this->nHigh);
-		if(this->disorder) this->single.init_whitenoise(i+this->random_offset,this->disorder_strength);
+		if(this->disorder) this->single.init_whitenoise(i+offset,this->disorder_strength);
 
 		t=clock();	
 		this->make_Hnn();
@@ -140,7 +142,7 @@ cout<<this->disorder<<endl;
 				temp=this->entanglement_entropy(this->eigvecs,this->states,jindex);
 				ee(w)+=temp;
 				ee2(w)+=temp*temp;
-				kltot(w)+=kullback_leibler(this->eigvecs[jindex+kl1],this->eigvecs[jindex+kl2]);
+		//		kltot(w)+=kullback_leibler(this->eigvecs[jindex+kl1],this->eigvecs[jindex+kl2]);
 				oldrtot(w)+=stupid_spacings(this->eigvals,jindex,jindex+stop,w);	
 			}
 			//average the density of states
@@ -149,7 +151,8 @@ cout<<this->disorder<<endl;
 		}else{
 		//****A call to ARPACK++. The fastest of all methods		
 			t=clock();	
-			mat2.CSR_from_Dense(this->EigenDense);
+			if(this->store_sparse) mat2.CSR_from_Sparse(this->EigenSparse);
+			else mat2.CSR_from_Dense(this->EigenDense);
 			cout<<"time to translate to a sparse matrix"<<((float)(clock()-t))/(CLOCKS_PER_SEC)<<endl;
 			t=clock();
 			time_t timer1,timer2;
@@ -166,25 +169,41 @@ cout<<this->disorder<<endl;
 				cout<<"eps="<<eps<<endl;
 				mat2.eigenvalues(stop,eps);
 	//			for(int k=0;k<mat2.eigvals.size();k++) cout<<mat2.eigvals[k]<<endl;
-	//			temp_oldr=stupid_spacings(mat2.eigvals,w);
-	//			oldrtot(w)+=temp_oldr;
-	//			EE_levels_all[w].insert(EE_levels_all[w].end(),mat2.eigvals.begin(),mat2.eigvals.end());
-	//			EE_levels_storage[w].push_back(mat2.eigvals);
+				temp_oldr=stupid_spacings(mat2.eigvals,w);
+				oldrtot(w)+=temp_oldr;
+				EE_levels_all[w].insert(EE_levels_all[w].end(),mat2.eigvals.begin(),mat2.eigvals.end());
+				EE_levels_storage[w].push_back(mat2.eigvals);
+				//save the eigenvalues
+				filename.str("");
+				filename<<"/mnt/cmcomp1/geraedts/7/energy"<<w<<"_"<<offset<<"_"<<this->disorder_strength;
+				energyout.open(filename.str().c_str(),ios::app);
+				for(int x=0;x<(signed)mat2.eigvals.size();x++) energyout<<mat2.eigvals[x]<<endl;
+				energyout.close();
+
+				//save the eigenvectors
+/*				filename.str("");
+				filename<<"/mnt/cmcomp1/geraedts/7/eigvec"<<w<<"_"<<offset<<"_"<<this->disorder_strength;
+				eigvecout.open(filename.str().c_str(),ios::out|ios::binary|ios::app);
+				for(int x=0;x<(signed)mat2.eigvecs.size();x++){
+					for(int y=0;y<(signed)mat2.eigvecs[x].size();y++){
+						eigvecout.write((char*)&(mat2.eigvecs[x][y]),sizeof(complex<double>));
+					}
+				}
+				eigvecout.close();*/
+				mat2.release_after_LU();
 			}
-			mat2.release();
 			
 		}//if arpack
 	}//NROD
-/*
+
 	vector<double> energy_grid,integrated_DOS,s,s_spacings;
 	ofstream rout,Sout;
-	stringstream filename;
 	for(int w=0;w<(signed)windows.size();w++){
 		filename.str("");
-		filename<<"rout"<<w;
+		filename<<"rout"<<w<<"_"<<offset;
 		rout.open(filename.str().c_str());
 		filename.str("");
-		filename<<"sout"<<w;
+		filename<<"sout"<<w<<"_"<<offset;
 		Sout.open(filename.str().c_str());
 
 		sort(EE_levels_all[w].begin(),EE_levels_all[w].end());
@@ -201,7 +220,7 @@ cout<<this->disorder<<endl;
 		Sout.close();
 		rout.close();
 	}
-*/
+
 //	write_vector(oldrtot,"oldr",this->NROD);
 }
 
@@ -247,7 +266,8 @@ void TorusSolver<ART>::run_groundstate(){
 			 
 	}//NROD
 //	write_vector(energy_sum,"energies");
-//	cout<<"energy: "<<this->eigvals[0]<<" "<<self_energy()<<" "<<this->eigvals[0]/(1.*this->Ne)+self_energy()<<endl;
+	for(int i=0;i<this->nStates;i++) cout<<this->eigvals[i]<<endl;
+	//" "<<self_energy()<<" "<<this->eigvals[0]/(1.*this->Ne)+self_energy()<<endl;
 //	haldane=false;
 //	this->make_Hnn();
 //	Eigen::VectorXcd tempvec=Std_To_Eigen(this->eigvecs[0]);

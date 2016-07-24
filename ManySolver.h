@@ -52,7 +52,7 @@ protected:
 	virtual ART six_body(int a, int b, int c, int ,int ,int );
 	virtual int get_charge(int state)=0;//could make virtual
 
-	void init();
+	void init(int tempcharge);
 	void interaction_cache();
 	void disorder_cache();
 	void projected_interaction_cache();
@@ -92,6 +92,10 @@ protected:
 	vector<int> orig_states;
 	void basis_convert(vector<ART> &evec);
 	void expand(int,ART,int, vector<ART> &new_evec);
+
+	bool store_sparse;
+	vector<Eigen::Triplet<ART> > Hnn_triplets;
+	Eigen::SparseMatrix<ART> EigenSparse;
 
 };
 
@@ -151,10 +155,16 @@ ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
 	//you wouldn't believe how much faster this makes the code
 	NPhi2=NPhi*NPhi;
 	NPhi3=NPhi*NPhi2;
+
+	store_sparse=false;
 }	
 
 template<class ART>
-void ManySolver<ART>::init(){
+void ManySolver<ART>::init(int tempcharge){
+	if(tempcharge>=0 && tempcharge<NPhi){
+		has_charge=1;
+		charge=tempcharge;
+	}
 	make_states(); 
 	interaction_cache();
 	if(project && !disordered_projection){
@@ -206,7 +216,13 @@ void ManySolver<ART>::make_states(){
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
 	if(cache && disorder) disorder_cache();
-	this->EigenDense=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
+
+	if(store_sparse){
+		Hnn_triplets.clear();
+		EigenSparse=Eigen::SparseMatrix<ART>(nStates,nStates);
+	}
+	else this->EigenDense=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
+
 	int j;
 	ART temp;
 	for(signed int a=0;a<NPhi;a++){
@@ -219,7 +235,8 @@ void ManySolver<ART>::make_Hnn(){
 				for(int i=0;i<(signed)nStates;i++){
 					if ((states[i] & 1<<a) && (b==a || (!( states[i] & 1<<b) && a>=nLow && a<NPhi-nHigh && b>=nLow && b<NPhi-nHigh) ) ){
 						j=lookup_flipped(i,states,2,a,b);
-						this->EigenDense(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
+						if(store_sparse) Hnn_triplets.push_back(Eigen::Triplet<ART>(i,j,(double)adjust_sign(a,b,states[i]) * temp));
+						else this->EigenDense(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
 					}
 				}
 			}
@@ -240,14 +257,20 @@ void ManySolver<ART>::make_Hnn(){
 						 ( (a>=nLow && a<NPhi-nHigh) || a==c ||a==d) &&
 						 ( (b<NPhi-nHigh && b>=nLow) || b==c ||b==d)  )  {
 							j=lookup_flipped(i,states,4,a,b,c,d);
-							this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
+							if(store_sparse) Hnn_triplets.push_back(Eigen::Triplet<ART>(i,j,(double)adjust_sign(a,b,c,d,states[i]) * temp));
+							else this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}
 					}
 				}//d	
 			}//c	
 		}//b
 	}//a
+	if(store_sparse){
+		EigenSparse.setFromTriplets(Hnn_triplets.begin(),Hnn_triplets.end());
+		EigenSparse.makeCompressed();
+	}
 }
+
 
 //same as above, but does a six-body term for getting pfaffians
 //note: this function is not compatible with projection or periodic BC
