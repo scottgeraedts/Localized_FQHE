@@ -53,7 +53,7 @@ protected:
 	virtual int get_charge(int state)=0;//could make virtual
 
 	void init(int tempcharge);
-	void interaction_cache();
+	virtual void interaction_cache();
 	void disorder_cache();
 	void projected_interaction_cache();
 	void ph_symmetrize();
@@ -257,6 +257,7 @@ void ManySolver<ART>::make_Hnn(){
 						 ( (a>=nLow && a<NPhi-nHigh) || a==c ||a==d) &&
 						 ( (b<NPhi-nHigh && b>=nLow) || b==c ||b==d)  )  {
 							j=lookup_flipped(i,states,4,a,b,c,d);
+//							cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
 							if(store_sparse) Hnn_triplets.push_back(Eigen::Triplet<ART>(i,j,(double)adjust_sign(a,b,c,d,states[i]) * temp));
 							else this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}

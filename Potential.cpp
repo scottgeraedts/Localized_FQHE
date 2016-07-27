@@ -1,6 +1,7 @@
 #include "SingleSolver.h"
 Potential::Potential(string _type, int _qbounds, int seed, double _Lx, double _Ly, map <string, double> &params):qbounds(_qbounds),type(_type),Lx(_Lx),Ly(_Ly){
 	ran.seed(seed);
+	cout<<"random seed="<<seed<<endl;
 	V.resize(2*qbounds+1,qbounds+1);
 
 	if (type=="gaussian") make_potential_gaussian(params);

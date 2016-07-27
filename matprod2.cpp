@@ -194,12 +194,20 @@ void MatrixWithProduct2::ShiftInvert(double E){
 	}
 }
 double MatrixWithProduct2::single_energy(string type){
+#ifdef USE_ARPACK
 	ARCompStdEig<double, MatrixWithProduct2 >  dprob(ncols(), 5, this, &MatrixWithProduct2::MultMv,type,(int)0, 1e-10,1e6);
 	dprob.FindEigenvalues();
 	return real(dprob.Eigenvalue(4));
+#else 
+	cout<<"you need to set the USE_ARPACK FLAG in version.h to use this function"<<endl;
+	exit(0);
+	return 0.;
+#endif
+
 }
 
 int MatrixWithProduct2::eigenvalues(int stop, double E){
+#ifdef USE_ARPACK
 	vector<double>temp(n,0);
 	int Nconverged;
 	if (E==-100){
@@ -260,6 +268,11 @@ int MatrixWithProduct2::eigenvalues(int stop, double E){
 	}
 	//lowlevpos=sort_indexes(eigvals);
 	return Nconverged;
+#else 
+	cout<<"you need to set the USE_ARPACK FLAG in version.h to use this function"<<endl;
+	exit(0);
+	return 0.;
+#endif
 //	for(int i=0;i<Nconverged;i++) cout<<dprob.Eigenvalue(i)<<endl;
 	
 }

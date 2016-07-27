@@ -2,7 +2,9 @@
 #define TORUS_SOLVER_H
 #include "version.h"
 #include "ManySolver.h"
+#ifdef USE_CLUSTER
 #include "matprod2.h"
+#endif
 
 extern"C"{
 	complex<double> landau_coulomb_(int *k1, int *k2, int *k3, int *k4);
@@ -49,7 +51,7 @@ private:
 template <class ART>
 TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	//stuff unique to the torus
-	double alpha=1.;
+	double alpha=0.5;
 	Ly=sqrt(2.*M_PI*this->NPhi*alpha);//aspect ratio is Lx/Ly=alpha
 	Lx=Ly/alpha;
 	if(this->disorder || this->project){
@@ -65,9 +67,13 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 
 template<class ART>
 void TorusSolver<ART>::run_finite_energy(int offset){
-	cout<<offset<<endl;
+
+#ifndef USE_CLUSTER
+	cout<<"can't use this function if not on the cluster!"<<endl;
+	exit(0);
+#endif
 	haldane=true;
-	this->store_sparse=true;
+	this->store_sparse=false;
 
 	//which states to look at
 	double minE,maxE;
@@ -99,7 +105,7 @@ void TorusSolver<ART>::run_finite_energy(int offset){
 		tempvec=vector<double>(stop*windows.size(),0);	
 
 	vector< vector<double> > energies(this->NROD,tempvec);
-	double temp,temp_oldr, temp_kl;
+	double temp;
 	vector<double>::iterator low;
 cout<<this->disorder<<endl;
 	stringstream filename;
@@ -107,8 +113,11 @@ cout<<this->disorder<<endl;
 
 	vector < vector<double> > EE_levels_all(windows.size());
 	vector < vector < vector<double> > > EE_levels_storage(windows.size());
+	
+#ifdef USE_CLUSTER
 	MatrixWithProduct2 mat2(this->nStates);
 	mat2.set_mode("superLU");
+#endif
 	for(int i=0;i<this->NROD;i++){
 		//construct hamiltonian
 		if(this->project && this->disordered_projection) this->single.init_deltas_random(i+this->random_offset,this->nLow,this->nHigh);
@@ -131,8 +140,8 @@ cout<<this->disorder<<endl;
 			//compute windows, and get js from windows
 			minE=this->eigvals[0];
 			maxE=this->eigvals[this->nStates-1];
-			cout<<maxE<<" "<<minE<<endl;
-			//for(int w=0;w<this->nStates;w++) cout<<this->eigvals[w]<<endl;
+			//cout<<maxE<<" "<<minE<<endl;
+			for(int w=0;w<this->nStates;w++) cout<<this->eigvals[w]<<endl;
 			for(int w=0;w<windows.size();w++){
 				low=lower_bound(this->eigvals.begin(),this->eigvals.end(),minE+windows[w]*(maxE-minE));
 				jindex=low-this->eigvals.begin();
@@ -142,14 +151,12 @@ cout<<this->disorder<<endl;
 				temp=this->entanglement_entropy(this->eigvecs,this->states,jindex);
 				ee(w)+=temp;
 				ee2(w)+=temp*temp;
-		//		kltot(w)+=kullback_leibler(this->eigvecs[jindex+kl1],this->eigvecs[jindex+kl2]);
 				oldrtot(w)+=stupid_spacings(this->eigvals,jindex,jindex+stop,w);	
 			}
 			//average the density of states
 			energies[i]=this->eigvals; //annoyingly, need to save all the eigenvalues for later
-			
 		}else{
-		//****A call to ARPACK++. The fastest of all methods		
+#ifdef USE_CLUSTER		//if you're not on the cluster you don't have access to the libraries for this
 			t=clock();	
 			if(this->store_sparse) mat2.CSR_from_Sparse(this->EigenSparse);
 			else mat2.CSR_from_Dense(this->EigenDense);
@@ -191,8 +198,9 @@ cout<<this->disorder<<endl;
 				}
 				eigvecout.close();*/
 				mat2.release_after_LU();
-			}
 			
+			}
+#endif			
 		}//if arpack
 	}//NROD
 
@@ -266,7 +274,7 @@ void TorusSolver<ART>::run_groundstate(){
 			 
 	}//NROD
 //	write_vector(energy_sum,"energies");
-	for(int i=0;i<this->nStates;i++) cout<<this->eigvals[i]<<endl;
+	for(int i=0;i<10;i++) cout<<this->eigvals[i]<<endl;
 	//" "<<self_energy()<<" "<<this->eigvals[0]/(1.*this->Ne)+self_energy()<<endl;
 //	haldane=false;
 //	this->make_Hnn();
@@ -282,11 +290,11 @@ void TorusSolver<ART>::run_groundstate(){
 //	cout<<"energy: "<<real(ee)<<" "<<self_energy()<<" "<<real(ee)/(1.*this->Ne)+self_energy()<<endl;
 //	structure_factors(this->eigvecs[0]);
 
-	stringstream filename;
-	filename<<"eigenvectors"<<this->Ne;
-	ofstream eigout(filename.str().c_str());
-	for(unsigned int j=0;j<this->eigvecs[0].size();j++)
-		eigout<<real(this->eigvecs[0][j])<<" "<<imag(this->eigvecs[0][j])<<endl;
+//	stringstream filename;
+//	filename<<"eigenvectors"<<this->Ne;
+//	ofstream eigout(filename.str().c_str());
+//	for(unsigned int j=0;j<this->eigvecs[0].size();j++)
+//		eigout<<real(this->eigvecs[0][j])<<" "<<imag(this->eigvecs[0][j])<<endl;
 }
 
 template<class ART>

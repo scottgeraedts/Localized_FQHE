@@ -16,9 +16,11 @@
 
 using namespace std;
 
+#ifdef USE_ARPACK
 #include "areig.h"
 #include "arscomp.h"
 //#include "arssym.h"
+#endif 
 
 
 extern"C"{
