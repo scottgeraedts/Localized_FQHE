@@ -51,7 +51,7 @@ private:
 template <class ART>
 TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	//stuff unique to the torus
-	double alpha=1.;
+	double alpha=0.5;
 	Ly=sqrt(2.*M_PI*this->NPhi*alpha);//aspect ratio is Lx/Ly=alpha
 	Lx=Ly/alpha;
 	if(this->disorder || this->project){
@@ -235,7 +235,7 @@ cout<<this->disorder<<endl;
 template<class ART>
 void TorusSolver<ART>::run_groundstate(){
 
-	haldane=true;
+	haldane=false;
 	arpack=false;
 	this->disorder=0;
 	this->project=0;
@@ -274,7 +274,7 @@ void TorusSolver<ART>::run_groundstate(){
 			 
 	}//NROD
 //	write_vector(energy_sum,"energies");
-	for(int i=0;i<this->nStates;i++) cout<<this->eigvals[i]<<endl;
+	for(int i=0;i<10;i++) cout<<this->eigvals[i]<<endl;
 	//" "<<self_energy()<<" "<<this->eigvals[0]/(1.*this->Ne)+self_energy()<<endl;
 //	haldane=false;
 //	this->make_Hnn();
@@ -290,11 +290,11 @@ void TorusSolver<ART>::run_groundstate(){
 //	cout<<"energy: "<<real(ee)<<" "<<self_energy()<<" "<<real(ee)/(1.*this->Ne)+self_energy()<<endl;
 //	structure_factors(this->eigvecs[0]);
 
-	stringstream filename;
-	filename<<"eigenvectors"<<this->Ne;
-	ofstream eigout(filename.str().c_str());
-	for(unsigned int j=0;j<this->eigvecs[0].size();j++)
-		eigout<<real(this->eigvecs[0][j])<<" "<<imag(this->eigvecs[0][j])<<endl;
+//	stringstream filename;
+//	filename<<"eigenvectors"<<this->Ne;
+//	ofstream eigout(filename.str().c_str());
+//	for(unsigned int j=0;j<this->eigvecs[0].size();j++)
+//		eigout<<real(this->eigvecs[0][j])<<" "<<imag(this->eigvecs[0][j])<<endl;
 }
 
 template<class ART>
