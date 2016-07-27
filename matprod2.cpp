@@ -205,6 +205,7 @@ int MatrixWithProduct2::eigenvalues(int stop, double E){
 	if (E==-100){
 		if(verbose>0) cout<<"not doing shift invert"<<endl;
 		ARCompStdEig<double, MatrixWithProduct2>  dprob(ncols(), stop, this, &MatrixWithProduct2::MultMv,"SR",(int)0, 1e-10,1e6);
+		dprob.FindEigenvalues();
 		dprob.FindEigenvectors();
 		Nconverged=dprob.ConvergedEigenvalues();
 
@@ -212,7 +213,7 @@ int MatrixWithProduct2::eigenvalues(int stop, double E){
 		eigvecs=vector<vector< complex<double> > >(dprob.ConvergedEigenvalues(),vector<complex<double> >(n,0));
 		for(int k=0;k<dprob.ConvergedEigenvalues();k++){
 			eigvals[k]=real(dprob.Eigenvalue(k));
-			eigvecs[k]=*(dprob.StlEigenvector(k));
+	//		eigvecs[k]=*(dprob.StlEigenvector(k));
 		}
 	}else{
 		if(LU_mode=="none") cout<<"error! you didn't set the LU mode!"<<endl;
