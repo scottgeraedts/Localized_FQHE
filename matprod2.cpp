@@ -138,6 +138,8 @@ void MatrixWithProduct2::MultInv(complex<double> *v, complex<double> *w){
 void MatrixWithProduct2::MultMv(complex<double> *v, complex<double> *w){
 	char uplo='u';
 	mkl_cspblas_zcsrsymv_(&uplo, &n, vals, ia, ja, v, w);
+//	char uplo='n';
+//	mkl_cspblas_zcsrgemv_(&uplo, &n, vals, ia, ja, v, w);
 }
 
 void MatrixWithProduct2::print(){
@@ -214,14 +216,14 @@ int MatrixWithProduct2::eigenvalues(int stop, double E){
 		if(verbose>0) cout<<"not doing shift invert"<<endl;
 		ARCompStdEig<double, MatrixWithProduct2>  dprob(ncols(), stop, this, &MatrixWithProduct2::MultMv,"SR",(int)0, 1e-10,1e6);
 		dprob.FindEigenvalues();
-		dprob.FindEigenvectors();
+//		dprob.FindSchurVectors();
 		Nconverged=dprob.ConvergedEigenvalues();
 
 		eigvals=vector<double>(Nconverged,0);
 		eigvecs=vector<vector< complex<double> > >(dprob.ConvergedEigenvalues(),vector<complex<double> >(n,0));
 		for(int k=0;k<dprob.ConvergedEigenvalues();k++){
 			eigvals[k]=real(dprob.Eigenvalue(k));
-	//		eigvecs[k]=*(dprob.StlEigenvector(k));
+//			eigvecs[k]=*(dprob.StlSchurVector(k));
 		}
 	}else{
 		if(LU_mode=="none") cout<<"error! you didn't set the LU mode!"<<endl;
@@ -276,6 +278,70 @@ int MatrixWithProduct2::eigenvalues(int stop, double E){
 //	for(int i=0;i<Nconverged;i++) cout<<dprob.Eigenvalue(i)<<endl;
 	
 }
+void MatrixWithProduct2::direct_arpack(int nev){
+	int ido=0,info=0,ncv=nev+30;
+	char bmat='I';
+	string which="SR";
+	double tol=0.;
+	complex<double> *resid=new complex<double>[n];
+	complex<double> *V=new complex<double>[n*ncv];
+	complex<double> *workd=new complex<double>[3*n];
+	double *rwork=new double[ncv];
+	int lworkl=3*ncv*ncv+5*ncv;
+	complex<double> *workl=new complex<double>[3*ncv*ncv+6*ncv];
+	int iparam[11],ipntr[14];
+	iparam[0]=1;//ishift, don't understand
+	iparam[1]=1;
+	iparam[2]=200; //maxiter
+	iparam[3]=1;//must be 1
+	iparam[4]=nev;
+	iparam[5]=1;
+	iparam[6]=1;//if not one, doing a general eigenproblem
+	iparam[7]=1;//i don't know what any of the rest of these do
+	iparam[8]=1;
+	iparam[9]=1;
+	iparam[10]=1;
+	for(int i=0;i<n;i++){
+		resid[i]=complex<double>(0.,0.);
+	}
+		
+	while(ido!=99){
+		znaupd_(&ido,&bmat,&n,which.c_str(),&nev
+			,&tol,resid,&ncv,V,&n,iparam,ipntr,workd,
+			workl,&lworkl,rwork,&info);
+		if (info <0){
+			cout<<"Erorr with znaupd "<<info<<endl;
+		}
+		if(ido==-1 || ido==1){
+			MultMv(&(workd[ipntr[0]]),&(workd[ipntr[1]]));
+		}
+	}
+
+	cout<<"finished znaupd loop "<<iparam[2]<<" "<<iparam[4]<<" "<<iparam[8]<<" "<<info<<endl;
+	int rvec=1;
+	int *select=new int[ncv];
+	char howmany='P';
+	complex<double> *D=new complex<double>[nev], *Z=new complex<double>[n*nev];
+	complex<double> sigma;
+	complex<double> *workev=new complex<double>[2*ncv];
+
+	zneupd_(&rvec, &howmany, select, D, Z, &n, &sigma, workev, 
+		&bmat, &n, which.c_str(), &nev, &tol, resid, 
+		&ncv, V, &n, iparam, ipntr, 
+		workd, workl, &lworkl, rwork, &info); 
+
+	cout<<"here are  some eigenvalues"<<endl;
+	for(int i=0;i<nev;i++) cout<<D[i]<<endl;
+	delete [] resid;
+	delete [] V;
+	delete [] workd;
+	delete [] workl;
+	delete [] rwork;
+
+	delete [] select;
+	delete [] D;
+	delete [] Z;
+}
 //this should be called every time a different shift is required
 void MatrixWithProduct2::release_after_LU(){
 
@@ -288,9 +354,11 @@ void MatrixWithProduct2::release_after_LU(){
 }
 
 MatrixWithProduct2::~MatrixWithProduct2(){
-	delete [] vals;
-	delete [] ia;
-	delete [] ja;
+	if(LU_mode != "none"){
+		delete [] vals;
+		delete [] ia;
+		delete [] ja;
+	}
 	if(LU_mode=="pardiso"){
 		int phase=0;
 		int error=0;
