@@ -1,4 +1,5 @@
 #include "SphereSolver.h"
+#include <algorithm>
 SphereSolver::SphereSolver(int x):ManySolver<double>(){
 	//stuff unique to the sphere
 //	NPhi=3*Ne-tshift+1;
@@ -7,22 +8,30 @@ SphereSolver::SphereSolver(int x):ManySolver<double>(){
 	dQ=NPhi-1; //2*Q, useful in a lot of formulae
 //	make_VL_Tpfaff();
 	make_VL_haldane();
+	VL[dQ-1]=1;
+	VL[dQ-3]=0.28;
+	VL[dQ-5]=V3overV1;
 //	make_VL_coulomb();
 
 //	ground_state();		
 	energy_spectrum();
 }
 void SphereSolver::energy_spectrum(){
+	
+	//store_sparse=true;
 	for(int c=Ne%2;c<=Ne*(Ne+1-Ne%2);c+=2){
 		charge=c;
 		make_states();
 
+		if(nStates==0) continue;
 		make_Hnn();
+		
+		
 //		make_Hnn_six();
 //		ph_symmetrize();
 
 		EigenDenseEigs();
-		for(int i=0;i<nStates;i++) 	
+		for(int i=0;i<min(nStates,10);i++) 	
 			cout<<setprecision(7)<<charge<<" "<<eigvals[i]<<endl;
 
 	}
@@ -101,7 +110,7 @@ void SphereSolver::make_VL_Tpfaff(){
 		V1+=pow(ClebschGordan(2*dQ-2,dQ,0,M,3*dQ-6),2)*(1+4*temp1*lil_sign(dQ+1) + temp1_2);
 		V3+=pow(ClebschGordan(2*dQ-6,dQ,0,M,3*dQ-6),2)*(1+4*temp3*lil_sign(dQ+1) + temp3_2);
 	}
-//	cout<<setprecision(12)<<"calculated pseudopotentials: V1="<<V1<<" V3="<<V3<<endl;
+	cout<<setprecision(12)<<"calculated pseudopotentials: V1="<<V1<<" V3="<<V3<<endl;
 	VL[dQ-1]=V1;
 	VL[dQ-3]=V3;
 }	

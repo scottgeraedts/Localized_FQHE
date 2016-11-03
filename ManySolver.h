@@ -37,6 +37,12 @@ public:
 	void disorderHnn();
 	void make_states();
 	
+	vector<int> get_states();
+	
+	Eigen::SparseMatrix<ART> getSparse();
+	bool store_sparse;
+	Eigen::SparseMatrix<ART> EigenSparse;
+	
 protected:
 	int Ne,NPhi,nStates,NPhi2,NPhi3;
 	int nHigh,nLow,NROD,random_offset;
@@ -93,9 +99,7 @@ protected:
 	void basis_convert(vector<ART> &evec);
 	void expand(int,ART,int, vector<ART> &new_evec);
 
-	bool store_sparse;
 	vector<Eigen::Triplet<ART> > Hnn_triplets;
-	Eigen::SparseMatrix<ART> EigenSparse;
 
 };
 
@@ -213,6 +217,10 @@ void ManySolver<ART>::make_states(){
 //	for(int i=0;i<nStates;i++)
 //		cout<<(bitset<12>)states[i]<<endl;
 }
+
+template<class ART>
+vector<int> ManySolver<ART>::get_states(){ return states; }
+
 template<class ART>
 void ManySolver<ART>::make_Hnn(){
 	if(cache && disorder) disorder_cache();
@@ -809,5 +817,7 @@ void ManySolver<ART>::plot_spectrum(string name){
 		}//charge
 	}
 	outfile.close();				
-}	
+}
+template<class ART>
+Eigen::SparseMatrix<ART> ManySolver<ART>::getSparse(){ return EigenSparse; }	
 #endif

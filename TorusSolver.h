@@ -51,7 +51,7 @@ private:
 template <class ART>
 TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	//stuff unique to the torus
-	double alpha=0.5;
+	double alpha=1;
 	Ly=sqrt(2.*M_PI*this->NPhi*alpha);//aspect ratio is Lx/Ly=alpha
 	Lx=Ly/alpha;
 	if(this->disorder || this->project){
@@ -62,6 +62,7 @@ TorusSolver<ART>::TorusSolver(int x):ManySolver<ART>(){
 	this->init(x);
 	this->periodic=1;
 	arpack=true;
+	haldane=false;
 
 }
 
@@ -235,7 +236,7 @@ cout<<this->disorder<<endl;
 template<class ART>
 void TorusSolver<ART>::run_groundstate(){
 
-	haldane=false;
+	haldane=true;
 	arpack=false;
 	this->disorder=0;
 	this->project=0;
@@ -293,8 +294,11 @@ void TorusSolver<ART>::run_groundstate(){
 //	stringstream filename;
 //	filename<<"eigenvectors"<<this->Ne;
 //	ofstream eigout(filename.str().c_str());
-//	for(unsigned int j=0;j<this->eigvecs[0].size();j++)
-//		eigout<<real(this->eigvecs[0][j])<<" "<<imag(this->eigvecs[0][j])<<endl;
+	for(int i=0;i<3;i++){
+		for(unsigned int j=0;j<this->eigvecs[0].size();j++)
+			if(norm(this->eigvecs[i][j])>1e-10) cout<<real(this->eigvecs[i][j])<<" "<<imag(this->eigvecs[i][j])<<" "<<(bitset<9>)this->states[j]<<endl;
+		cout<<endl;
+	}
 }
 
 template<class ART>

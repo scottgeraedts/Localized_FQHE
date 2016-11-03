@@ -1,14 +1,14 @@
 #include "TorusSolver.h"
 
-unsigned int cycle_M(unsigned int in, int NPhi, int M, int &sign){
-	int out,old=in;
-	for(int i=0;i<M;i++){
-		out=cycle_bits(old,NPhi);
-		if (out<old && NPhi%4==0) sign*=-1;
-		old=out;
-	}
-	return out;
-}
+//unsigned int cycle_M(unsigned int in, int NPhi, int M, int &sign){
+//	int out,old=in;
+//	for(int i=0;i<M;i++){
+//		out=cycle_bits(old,NPhi);
+//		if (out<old && NPhi%4==0) sign*=-1;
+//		old=out;
+//	}
+//	return out;
+//}
 
 //make shrinking matrix
 template<class ART>
@@ -126,5 +126,6 @@ Eigen::SparseMatrix<ART> TorusSolver<ART>::density_operator(int mx, int my){
 	}
 	rho.setFromTriplets(triplets.begin(),triplets.end());
 	if(verbose>1) cout<<rho<<endl;
+	cout<<rho<<endl;
 	return rho;				
 }
