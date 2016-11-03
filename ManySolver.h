@@ -26,7 +26,7 @@
 using namespace std;
 
 template <class ART>
-class ManySolver:public MatrixWithProduct<ART>, public Wavefunction<ART>{
+class ManySolver:public Wavefunction<ART>{
 public:
 	ManySolver();
 	void print_H();
@@ -36,6 +36,7 @@ public:
 	void make_Hnn_six();
 	void disorderHnn();
 	void make_states();
+	Eigen::Matrix<ART,-1,-1> EigenDense;
 	
 	vector<int> get_states();
 	
@@ -106,7 +107,7 @@ protected:
 ///**************DEFINITIONS HERE************///
 
 template<class ART>
-ManySolver<ART>::ManySolver():MatrixWithProduct<ART>(),Wavefunction<ART>(){
+ManySolver<ART>::ManySolver():Wavefunction<ART>(){
 	//read stuff for this run from the parameters file
 	ifstream infile;
 	infile.open("params");
@@ -203,7 +204,7 @@ void ManySolver<ART>::make_states(){
 		}
 	}
 	nStates=j;		 
-	this->setrows(nStates);
+	//this->setrows(nStates);
 	
 	//this code is just a repeat of make_states, but it makes the untruncated basis
 	if(project){
@@ -229,7 +230,7 @@ void ManySolver<ART>::make_Hnn(){
 		Hnn_triplets.clear();
 		EigenSparse=Eigen::SparseMatrix<ART>(nStates,nStates);
 	}
-	else this->EigenDense=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
+	else EigenDense=Eigen::Matrix<ART, Eigen::Dynamic, Eigen::Dynamic>::Zero(nStates,nStates);
 
 	int j;
 	ART temp;
@@ -244,7 +245,7 @@ void ManySolver<ART>::make_Hnn(){
 					if ((states[i] & 1<<a) && (b==a || (!( states[i] & 1<<b) && a>=nLow && a<NPhi-nHigh && b>=nLow && b<NPhi-nHigh) ) ){
 						j=lookup_flipped(i,states,2,a,b);
 						if(store_sparse) Hnn_triplets.push_back(Eigen::Triplet<ART>(i,j,(double)adjust_sign(a,b,states[i]) * temp));
-						else this->EigenDense(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
+						else EigenDense(i,j)+=(double)adjust_sign(a,b,states[i]) * temp;
 					}
 				}
 			}
@@ -267,7 +268,7 @@ void ManySolver<ART>::make_Hnn(){
 							j=lookup_flipped(i,states,4,a,b,c,d);
 //							cout<<a<<" "<<b<<" "<<c<<" "<<d<<" "<<temp<<endl;
 							if(store_sparse) Hnn_triplets.push_back(Eigen::Triplet<ART>(i,j,(double)adjust_sign(a,b,c,d,states[i]) * temp));
-							else this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
+							else EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,states[i]) ) * temp;
 						}
 					}
 				}//d	
@@ -305,7 +306,7 @@ void ManySolver<ART>::make_Hnn_six(){
 							(!(states[i] & 1<<e) || e==a || e==b || e==c) && 
 							(!(states[i] & 1<<f) || f==a || f==b || f==c) ){
 								j=lookup_flipped(i,states,6,a,b,c,d,e,f);
-								this->EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,e,f,states[i]) ) * temp * permute_sign(3,a,b,c)*permute_sign(3,d,e,f);
+								EigenDense(i,j)+=(double)(adjust_sign(a,b,c,d,e,f,states[i]) ) * temp * permute_sign(3,a,b,c)*permute_sign(3,d,e,f);
 							}
 //							//the ph-conjugate term
 //							if( !(states[i] & 1<<a) && !(states[i] & 1<<b) && !(states[i] & 1<<c) && 
@@ -342,10 +343,10 @@ void ManySolver<ART>::ph_symmetrize(){
 	
 	for(int i=0;i<nStates;i++){
 		for(int j=0;j<nStates;j++){
-			temp(i,j)=this->EigenDense(i,j)+this->EigenDense(conj_dict[i],conj_dict[j]);
+			temp(i,j)=EigenDense(i,j)+EigenDense(conj_dict[i],conj_dict[j]);
 		}
 	}
-	this->EigenDense=temp;
+	EigenDense=temp;
 	
 }
 template<class ART> 
@@ -700,7 +701,7 @@ void ManySolver<ART>::make_lookups(){
 
 template<class ART>
 Eigen::Matrix<ART,-1,1> ManySolver<ART>::MultEigen(Eigen::Matrix<ART,-1,1> invec){
-	return this->EigenDense*invec;
+	return EigenDense*invec;
 }
 
 //convert a wavefunction in the truncated-orbitals basis to one in the Landau basis

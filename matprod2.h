@@ -6,13 +6,17 @@
 #define MATPROD2_H
 #define SUPERLU_INC_
 
+#include "version.h"
 #include <iostream>
 #include <algorithm>
 #include "utils.h"
 #include <ctime>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
-//#include "slu_zdefs.h"
+#ifndef USE_ARPACK //these headers are in arpack++ as well so we cant include them twice
+#include "slu_zdefs.h"
+typedef doublecomplex ldcomplex;
+#endif
 
 using namespace std;
 
@@ -30,6 +34,7 @@ extern"C"{
 	void zgemm_(char *transa, char *transb, int *rows, int *cols, int *k, double *alpha, complex<double> *a, int *lda, complex<double> *b, int *ldb, double *beta, complex<double> *c, int *ldc);
 	//sparse matrix-vector
 	void mkl_cspblas_zcsrsymv_(char *uplo, int *rows, complex<double> *vals, int *ia, int *ja, complex<double> *v, complex<double> *w);
+	void mkl_cspblas_zcsrgemv_(char *uplo, int *rows, complex<double> *vals, int *ia, int *ja, complex<double> *v, complex<double> *w);
 	//pardiso
 	void pardisoinit_(int *pt, int *mtype, int *iparm);
 	void pardiso_(int *pt, int *maxfct, int *mnum, int *mtype, int *phase, int *rows, complex<double> *a, int *ia, int *ja, int *perm, int *nrhs, int *iparm, int *msglvl, complex<double> *b, complex<double> *x, int *error);
@@ -38,15 +43,24 @@ extern"C"{
 	void mkl_mem_stat_();
 	void mkl_disable_fast_mm_();
 	void MKL_FreeBuffers();
-}
 
+#ifndef USE_ARPACK
+	void znaupd_(int *ido, char *bmat, int *n, const char *which, int *nev, double *tol, complex<double> *resid, int *ncv, 
+		complex<double> *V, int *ldv, int *iparam, int *ipntr, complex<double> *workd, complex<double> *workl, int * lworkl, double *rwork, int *info);
+
+	void zneupd_(int *rvec, char *howmany, int *select, complex<double> *D, complex<double> *Z, 
+		int *n, complex<double> *sigma, complex<double> *workev, 
+		char *bmat, int *n2, const char *which, int *nev, double *tol, complex<double> *resid, 
+		int *ncv, complex<double> *V, int *n3, int *iparam, int *ipntr, complex<double> *workd, complex<double> *workl,
+		int *lworkl, double *rwork, int *info);	
+#endif
+}
 class MatrixWithProduct2 {
 
  private:
 
 	int n; // Number of rows and columns.
 	int nonzero;
-	double E1,E2;
 	
 	complex<double> *vals,*raw_evals;
 	int *ia, *ja;
@@ -97,6 +111,7 @@ class MatrixWithProduct2 {
 
   int eigenvalues(int k, double E=-100); //computes eigenvalues and eigenvectors using ARPACK, E should be -100 if you want the ground state. If E is not -100, does shift-invert around E
   double single_energy(string whichp); //finds only the highest or lowest state, used for estimating energy bounds before doing shift-invert to target a section of the spectrum
+	void direct_arpack(int n);	
 
 	void release_after_LU();    
   ~MatrixWithProduct2();
