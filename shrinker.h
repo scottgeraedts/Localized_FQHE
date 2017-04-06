@@ -38,7 +38,7 @@ void TorusSolver<ART>::makeShrinker(int nx){
 			temptrips.push_back( Eigen::Triplet< complex<double> >( col,index,polar(1.*sign,phase*2*M_PI/(1.*this->Ne)*nx ) ) );
 			found_states.push_back(index);
 //			cout<<(bitset<12>)this->states[index]<<" "<<phase*nx%this->Ne<<" "<<sign<<endl;
-			temp=cycle_M(temp,this->Ne,this->NPhi,invNu,sign);
+			temp=cycle_M(temp,this->NPhi,invNu,sign);
 			if(temp==this->states[i]) break;
 			it=lower_bound(this->states.begin(),this->states.end(),temp);
 			phase++;
